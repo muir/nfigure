@@ -1,8 +1,8 @@
 package nfigure
 
 import (
-	"sync"
 	"fmt"
+	"sync"
 
 	"github.com/muir/nfigure/nflex"
 	"github.com/pkg/errors"
@@ -22,16 +22,21 @@ type Registry struct {
 	lock             sync.Mutex
 	configFiles      []file
 	sources          *nflex.MultiSource
-	metaTag          string
-	validator        Validate
-	fillers          Fillers
 	configureStarted bool
+	registryConfig
 }
 
-type RegistryFuncArg func(*Registry)
+type registryConfig struct {
+	metaTag   string
+	validator Validate
+	fillers   Fillers
+	prefix    []string
+}
+
+type RegistryFuncArg func(*registryConfig)
 
 func WithFiller(tag string, filler Filler) RegistryFuncArg {
-	return func(r *Registry) {
+	return func(r *registryConfig) {
 		if filler == nil {
 			delete(r.fillers, tag)
 		} else {
@@ -41,7 +46,7 @@ func WithFiller(tag string, filler Filler) RegistryFuncArg {
 }
 
 func WithValidate(v Validate) RegistryFuncArg {
-	return func(r *Registry) {
+	return func(r *registryConfig) {
 		r.validator = v
 	}
 }
@@ -64,7 +69,7 @@ func WithValidate(v Validate) RegistryFuncArg {
 // elements, values of something that has been filled at a higher
 // level.
 func WithMetaTag(tag string) RegistryFuncArg {
-	return func(r *Registry) {
+	return func(r *registryConfig) {
 		r.metaTag = tag
 	}
 }
@@ -76,13 +81,15 @@ type file struct {
 
 func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
-		fillers: Fillers{
-			"env":    NewEnvFiller(),
-			"source": NewFileFiller(),
+		registryConfig: registryConfig{
+			fillers: Fillers{
+				"env":    NewEnvFiller(),
+				"source": NewFileFiller(),
+			},
 		},
 	}
 	for _, f := range options {
-		f(r)
+		f(&r.registryConfig)
 	}
 	return r
 }
@@ -119,7 +126,7 @@ func (r *Registry) Configure() error {
 	fmt.Println("XXX lenReq", r.lenRequests())
 	for i := 0; i < r.lenRequests(); i++ {
 		request := r.getRequest(i)
-		err := r.lockAndPreWalk(request)
+		err := r.preWalk(request)
 		if err != nil {
 			return errors.Wrap(err, request.name)
 		}
@@ -132,7 +139,7 @@ func (r *Registry) Configure() error {
 	}
 	for i := 0; i < r.lenRequests(); i++ {
 		request := r.getRequest(i)
-		err := request.fill(r.fillers)
+		err := request.fill()
 		if err != nil {
 			return errors.Wrap(err, request.name)
 		}
@@ -158,15 +165,15 @@ func (r *Registry) getRequest(i int) *Request {
 	return r.requests[i]
 }
 
-func (r *Registry) lockAndPreWalk(req *Request) error {
+func (r *Registry) preWalk(request *Request) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	return r.preWalk(req)
+	return r.preWalkLocked(request)
 }
 
-func (r *Registry) preWalk(request *Request) error {
+func (r *Registry) preWalkLocked(request *Request) error {
 	fmt.Println("XXX all prewalk")
-	for tag, filler := range r.fillers {
+	for tag, filler := range request.getFillersLocked() {
 		err := filler.PreWalk(tag, request, request.object)
 		if err != nil {
 			return errors.Wrap(err, tag)

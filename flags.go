@@ -270,6 +270,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 
 	for ; i < len(os.Args); i++ {
 		f := os.Args[i]
+		fmt.Println("XXX parse", f)
 		if f == "--" {
 			remainder = os.Args[i+1:]
 			break
@@ -329,8 +330,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 			}
 		}
 		if sub, ok := h.subcommands[f]; ok {
+			fmt.Println("XXX activating subcommand", sub)
 			if sub.configModel != nil {
-				err := h.registry.Request(sub.configModel)
+				err := h.registry.Request(sub.configModel,
+					WithFiller(h.tagName, sub))
 				if err != nil {
 					return err
 				}
@@ -367,30 +370,36 @@ func (h *FlagHandler) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag
 		return false, err
 	}
 	var found bool
+	isMap := nonPointer(t).Kind() == reflect.Map
 	for _, n := range ref.Name {
 		var m *map[string]*flagRef
-		switch utf8.RuneCountInString(n) {
-		case 0:
-			continue
-		case 1:
-			m = &h.shortFlags
-		default:
-			m = &h.longFlags
+		if isMap {
+			m = &h.mapFlags
+		} else {
+			switch utf8.RuneCountInString(n) {
+			case 0:
+				continue
+			case 1:
+				m = &h.shortFlags
+			default:
+				m = &h.longFlags
+			}
 		}
 		ref, ok := (*m)[n]
 		if !ok {
-			return false, errors.New("internal error: Could not find pre-registered flagRef")
+			return false, errors.Errorf("internal error: Could not find pre-registered flagRef for %s", n)
 		}
 		if len(ref.values) == 0 && !ref.isMap {
 			found = true
 			continue
 		}
+		fmt.Println("XXX lookup setter", t, tag.Tag, "in", ref.Name)
 		setter, ok := ref.setters[setterKey{
 			typ: t,
 			tag: tag.Tag,
 		}]
 		if !ok {
-			return false, errors.New("internal error: Missing setter")
+			return false, errors.Errorf("internal error: Missing setter for -%s", n)
 		}
 		fmt.Println("XXX filling", tag)
 		fmt.Printf("XXX fill with %+v\n", ref)
@@ -417,6 +426,34 @@ func (h *FlagHandler) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag
 			if err != nil {
 				return false, err
 			}
+			return true, nil
+		}
+		if ref.isMap {
+			if len(ref.keys) == 0 {
+				return false, nil
+			}
+			m := reflect.MakeMap(t)
+			ks, err := reflectutils.MakeStringSetter(t.Key())
+			if err != nil {
+				return false, errors.Wrap(err, ref.used[0])
+			}
+			es := setter
+			for i, value := range ref.values {
+				key := ref.keys[i]
+				kp := reflect.New(t.Key())
+				err := ks(kp.Elem(), key)
+				if err != nil {
+					return false, errors.Wrapf(err, "key for %s", ref.used[i])
+				}
+				ep := reflect.New(t.Elem())
+				err = es(ep.Elem(), value)
+				if err != nil {
+					return false, errors.Wrapf(err, "value for %s", ref.used[i])
+				}
+				m.SetMapIndex(reflect.Indirect(kp), reflect.Indirect(ep))
+			}
+			fmt.Println("XXX v is", v.Type(), v.CanSet(), v.CanAddr(), "t is", t)
+			v.Set(m)
 			return true, nil
 		}
 		if ref.isSlice && ref.Split == "none" || len(ref.values) > 1 {
@@ -449,38 +486,10 @@ func (h *FlagHandler) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag
 			}
 			return true, nil
 		}
-		if ref.isMap {
-			if len(ref.keys) == 0 {
-				return false, nil
-			}
-			m := reflect.MakeMap(t)
-			ks, err := reflectutils.MakeStringSetter(reflect.PtrTo(t.Key()))
-			if err != nil {
-				return false, errors.Wrap(err, ref.used[0])
-			}
-			es, err := reflectutils.MakeStringSetter(reflect.PtrTo(t.Elem()))
-			if err != nil {
-				return false, errors.Wrap(err, ref.Name[0])
-			}
-			for i, value := range ref.values {
-				key := ref.keys[i]
-				kp := reflect.New(t.Key())
-				err := ks(kp, key)
-				if err != nil {
-					return false, errors.Wrapf(err, "key for %s", ref.used[i])
-				}
-				ep := reflect.New(t.Elem())
-				err = es(ep, value)
-				if err != nil {
-					return false, errors.Wrapf(err, "value for %s", ref.used[i])
-				}
-				m.SetMapIndex(reflect.Indirect(kp), reflect.Indirect(ep))
-			}
-			v.Set(m)
-			return true, nil
-		}
+		fmt.Println("XXX calling setter")
 		err := setter(v, ref.values[len(ref.values)-1])
 		if err != nil {
+			fmt.Println("XXX setter err", err)
 			return false, errors.Wrap(err, ref.used[len(ref.values)-1])
 		}
 		return true, nil
@@ -492,7 +501,7 @@ func (h *FlagHandler) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag
 }
 
 func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{}) error {
-	fmt.Println("XXX prewalk", tagName, ".")
+	fmt.Println("XXX prewalk", tagName, reflect.TypeOf(model))
 	v := reflect.ValueOf(model)
 	var walkErr error
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
@@ -507,10 +516,8 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 			walkErr = err
 			return true
 		}
-		t := f.Type
-		for t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
+		t := nonPointer(f.Type)
+		setterType := t
 		switch t.Kind() {
 		case reflect.Bool:
 			ref.isBool = true
@@ -520,6 +527,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 		case reflect.Map:
 			ref.isMap = true
 			ref.IsCounter = false
+			setterType = t.Elem()
 		}
 		switch ref.Split {
 		case "comma":
@@ -536,7 +544,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 			ref.explode = t.Len()
 			ref.Split = ""
 		}
-		setter, err := reflectutils.MakeStringSetter(f.Type, reflectutils.WithSplitOn(ref.Split))
+		setter, err := reflectutils.MakeStringSetter(setterType, reflectutils.WithSplitOn(ref.Split))
 		if err != nil {
 			walkErr = errors.Wrap(err, f.Name)
 			return true
@@ -555,18 +563,20 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				m = &h.mapFlags
 			}
 			sk := setterKey{
-				typ: f.Type,
+				typ: t,
 				tag: tag.Tag,
 			}
 			if existing, ok := (*m)[n]; ok {
 				// hmm, this flag is defined more than once!
 				existing.isBool = existing.isBool && ref.isBool
 				existing.setters[sk] = setter
+				fmt.Println("XXX set setter", f.Type, tag.Tag, "in", n)
 			} else {
 				ref.setters = map[setterKey]func(reflect.Value, string) error{
 					sk: setter,
 				}
 				(*m)[n] = &ref
+				fmt.Println("XXX set setter", f.Type, tag.Tag, "in", n)
 			}
 		}
 		return true
@@ -577,6 +587,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 func (h *FlagHandler) AddConfigFile(file string, keyPath []string) (Filler, error) { return nil, nil }
 func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag) []string                { return nil } // XXX
 func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag) int                      { return 0 }
+
 func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	return h, nil
 }

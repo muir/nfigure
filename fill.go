@@ -131,9 +131,20 @@ func (f Fillers) Keys(t reflect.Type, tagSet reflectutils.TagSet) []string {
 	return all
 }
 
-func (r *Request) fill(fillers Fillers) error {
+func (r *Request) fill() error {
 	v := reflect.ValueOf(r.object).Elem()
 	t := v.Type()
+	if r.metaTag == "" {
+		r.metaTag = r.registry.metaTag
+	}
+	fillers := r.getFillers()
+	for _, p := range r.getPrefix() {
+		var err error
+		fillers, err = fillers.Recurse(p, reflect.TypeOf(struct{}{}), reflectutils.TagSet{})
+		if err != nil {
+			return errors.Wrap(err, "request prefix "+p)
+		}
+	}
 	_, err := fillData{
 		r:       r,
 		name:    "",
@@ -169,7 +180,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 		f := t.Field(i)
 		tags := reflectutils.SplitTag(f.Tag).Set()
 		var directive metaTag
-		err := tags.Get(x.r.registry.metaTag).Fill(&directive)
+		err := tags.Get(x.r.metaTag).Fill(&directive)
 		fmt.Printf("XXX parse '%s'(%s), tag '%s' -> %v\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), directive)
 		if err != nil {
 			return false, errors.Wrap(err, f.Name)
@@ -228,6 +239,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	var anyFilled bool
 	for _, fp := range x.fillers.Pairs(x.tags) {
 		filled, err := fp.Filler.Fill(t, v, fp.Tag)
+		fmt.Println("XXX FP filled", fp.Tag, filled, err)
 		if err != nil {
 			return false, err
 		}
@@ -245,16 +257,21 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 
 	switch t.Kind() {
 	case reflect.Struct:
-		return x.fillStruct(t, v)
+		filled, err := x.fillStruct(t, v)
+		return anyFilled || filled, err
 	case reflect.Ptr:
 		e := reflect.New(t.Elem())
-		filled, err := x.fillField(t.Elem(), v.Elem())
+		fmt.Println("XXX t is", t, "e is", e.Elem().Type())
+		filled, err := x.fillField(t.Elem(), e.Elem())
 		if err != nil {
+			fmt.Println("XXX ptr filling err", err)
 			return false, err
 		}
 		if !filled {
+			fmt.Println("XXX ptr not filled")
 			return false, nil
 		}
+		fmt.Println("XXX filled ptr")
 		v.Set(e)
 		return true, nil
 	case reflect.Array:
@@ -344,6 +361,6 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		return anyFilled, nil
 	default:
-		return false, nil
+		return anyFilled, nil
 	}
 }
