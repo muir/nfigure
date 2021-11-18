@@ -8,6 +8,7 @@ var _ Source = &MultiSource{}
 
 type MultiSource struct {
 	sources []Source
+	first   bool
 }
 
 func (m *MultiSource) Copy() *MultiSource {
@@ -15,6 +16,7 @@ func (m *MultiSource) Copy() *MultiSource {
 	copy(n, m.sources)
 	return &MultiSource{
 		sources: n,
+		first:   m.first,
 	}
 }
 
@@ -30,6 +32,15 @@ func NewMultiSource(sources ...Source) *MultiSource {
 	return &MultiSource{
 		sources: sources,
 	}
+}
+
+func SetFirstIfMulti(source Source, first bool) Source {
+	if m, ok := source.(*MultiSource); ok {
+		c := m.Copy()
+		c.first = first
+		return c
+	}
+	return source
 }
 
 // CombineSources expects any MultiSource to be the first source
@@ -69,74 +80,71 @@ func (m *MultiSource) Recurse(keys ...string) Source {
 	}
 	return &MultiSource{
 		sources: n,
+		first:   m.first,
 	}
+}
+
+// find doesn't guarantee that something exists
+func (m *MultiSource) find(keys []string) (Source, bool) {
+	switch len(m.sources) {
+	case 0:
+		return nil, false
+	case 1:
+		return m.sources[0], true
+	}
+	if m.first {
+		for _, source := range m.sources {
+			if source.Exists(keys...) {
+				return source, true
+			}
+		}
+	} else {
+		for i := len(m.sources) - 1; i >= 0; i-- {
+			source := m.sources[i]
+			if source.Exists(keys...) {
+				return source, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func (m *MultiSource) Exists(keys ...string) bool {
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return true
-		}
-	}
-	return false
+	_, ok := m.find(keys)
+	return ok
 }
 
 func (m *MultiSource) GetBool(keys ...string) (bool, error) {
-	if len(m.sources) == 1 {
-		return m.sources[0].GetBool(keys...)
-	}
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return source.GetBool(keys...)
-		}
+	if source, ok := m.find(keys); ok {
+		return source.GetBool(keys...)
 	}
 	return false, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
 }
 
 func (m *MultiSource) GetInt(keys ...string) (int64, error) {
-	if len(m.sources) == 1 {
-		return m.sources[0].GetInt(keys...)
-	}
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return source.GetInt(keys...)
-		}
+	if source, ok := m.find(keys); ok {
+		return source.GetInt(keys...)
 	}
 	return 0, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
 }
 
 func (m *MultiSource) GetFloat(keys ...string) (float64, error) {
-	if len(m.sources) == 1 {
-		return m.sources[0].GetFloat(keys...)
-	}
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return source.GetFloat(keys...)
-		}
+	if source, ok := m.find(keys); ok {
+		return source.GetFloat(keys...)
 	}
 	return 0, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
 }
 
 func (m *MultiSource) GetString(keys ...string) (string, error) {
-	if len(m.sources) == 1 {
-		return m.sources[0].GetString(keys...)
-	}
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return source.GetString(keys...)
-		}
+	if source, ok := m.find(keys); ok {
+		return source.GetString(keys...)
 	}
 	return "", errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
 }
 
 func (m *MultiSource) Type(keys ...string) NodeType {
-	if len(m.sources) == 1 {
-		return m.sources[0].Type(keys...)
-	}
-	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			return source.Type(keys...)
-		}
+	if source, ok := m.find(keys); ok {
+		return source.Type(keys...)
 	}
 	return Undefined
 }
@@ -150,12 +158,15 @@ func (m *MultiSource) Keys(keys ...string) ([]string, error) {
 	var able int
 	for i, source := range m.sources {
 		if source.Exists(keys...) {
-			var err error
-			results[i], err = source.Keys(keys...)
+			found, err := source.Keys(keys...)
 			if err != nil {
 				return nil, err
 			}
-			total += len(results[i])
+			if m.first {
+				return found, nil
+			}
+			results[i] = found
+			total += len(found)
 			able++
 		}
 	}
@@ -187,6 +198,9 @@ func (m *MultiSource) Len(keys ...string) (int, error) {
 			l, err := source.Len(keys...)
 			if err != nil {
 				return 0, err
+			}
+			if m.first {
+				return l, nil
 			}
 			total += l
 			able++

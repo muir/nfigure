@@ -28,6 +28,12 @@ type flagSet3 struct {
 	PP ***float64 `flag:"fflag f"`
 }
 
+type flagSet4 struct {
+	S  []string  `flag:"s,split=none"`
+	Ip []*int    `flag:"ip,split=comma"`
+	SA [2]string `flag:"sa,split=explode"`
+}
+
 var cases = []struct {
 	base        interface{}
 	cmd         string
@@ -156,6 +162,48 @@ var cases = []struct {
 			I: 11,
 		},
 		remaining: []string{"xy"},
+	},
+	{
+		base:    &flagSet4{},
+		cmd:     "-sa foo bar baz",
+		goFlags: true,
+		want: &flagSet4{
+			SA: [2]string{"foo", "bar"},
+		},
+		remaining: []string{"baz"},
+	},
+	{
+		base:    &flagSet4{},
+		cmd:     "-s x,x -s y -s z z",
+		goFlags: true,
+		want: &flagSet4{
+			S: []string{"x,x", "y", "z"},
+		},
+		remaining: []string{"z"},
+	},
+	{
+		base:    &flagSet4{},
+		cmd:     "--ip=7,8",
+		goFlags: true,
+		want: &flagSet4{
+			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+		},
+	},
+	{
+		base:    &flagSet4{},
+		cmd:     "--ip 7 --ip=8",
+		goFlags: true,
+		want: &flagSet4{
+			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+		},
+	},
+	{
+		base:    &flagSet4{},
+		cmd:     "--ip 7,8",
+		goFlags: true,
+		want: &flagSet4{
+			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+		},
 	},
 }
 

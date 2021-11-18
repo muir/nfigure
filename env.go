@@ -1,8 +1,8 @@
 package nfigure
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"reflect"
 
 	"github.com/muir/reflectutils"
@@ -26,7 +26,15 @@ type envTag struct {
 	Split    string `pt:"split"`
 }
 
-func (e EnvFiller) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag) (bool, error) {
+func (e EnvFiller) Fill(
+	t reflect.Type,
+	v reflect.Value,
+	tag reflectutils.Tag,
+	firstOnly bool,
+) (bool, error) {
+	if tag.Tag == "" {
+		return false, nil
+	}
 	var tagData envTag
 	err := tag.Fill(&tagData)
 	if err != nil {
@@ -57,10 +65,10 @@ func (e EnvFiller) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag) (
 	return true, nil
 }
 
-func (e EnvFiller) Len(reflect.Type, reflectutils.Tag) int                         { return 0 }
-func (e EnvFiller) Keys(reflect.Type, reflectutils.Tag) []string                   { return nil }
+func (e EnvFiller) Len(reflect.Type, reflectutils.Tag, bool) int                   { return 0 }
+func (e EnvFiller) Keys(reflect.Type, reflectutils.Tag, bool) []string             { return nil }
 func (e EnvFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }
 func (e EnvFiller) AddConfigFile(string, []string) (Filler, error)                 { return e, nil }
-func (e EnvFiller) PreWalk(string,  *Request, interface{}) error                            { return nil }
+func (e EnvFiller) PreWalk(string, *Request, interface{}) error                    { return nil }
 func (e EnvFiller) PreConfigure(string, *Registry) error                           { return nil }
-func (s EnvFiller) ConfigureComplete() error { return nil }
+func (s EnvFiller) ConfigureComplete() error                                       { return nil }

@@ -209,6 +209,39 @@ func (h *FlagHandler) parseFlags(i int) error {
 		}
 	}
 
+	handleShort := func(flag string, inErr string) error {
+		fmt.Println("XXX lookup short flag", flag)
+		ref, ok := h.shortFlags[flag]
+		if !ok {
+			fmt.Println("XXX failure for", flag)
+			return UsageError(errors.Errorf("Flag %s not defined", inErr))
+		}
+		fmt.Printf("XXX ref for %s: %+v\n", inErr, ref)
+		switch {
+		case ref.isBool:
+			ref.values = append(ref.values, "t")
+			ref.used = append(ref.used, "-"+flag)
+		case ref.IsCounter:
+			ref.values = append(ref.values, "")
+			ref.used = append(ref.used, "-"+flag)
+		default:
+			count := 1
+			if ref.explode != 0 {
+				count = ref.explode
+			}
+			if i+count >= len(os.Args) {
+				return errors.Errorf("Expecting %d positional arguments after %s, but only %d are available",
+					count, inErr, len(os.Args)-i-1)
+			}
+			i++
+			fmt.Println("XXX CAPTURING", inErr, os.Args[i:i+count])
+			ref.values = append(ref.values, os.Args[i:i+count]...)
+			ref.used = append(ref.used, repeatString("-"+flag, count)...)
+			i += count - 1
+		}
+		return nil
+	}
+
 	longFlag := func(dash string, noDash string) (bool, error) {
 		if i := strings.IndexByte(noDash, '='); i != -1 {
 			flag := noDash[0:i]
@@ -246,6 +279,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			default:
 				count := 1
 				if ref.explode != 0 {
+					fmt.Println("XXX explode", ref.explode)
 					count = ref.explode
 				}
 				if i+count >= len(os.Args) {
@@ -255,6 +289,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 				i++
 				ref.values = append(ref.values, os.Args[i:i+count]...)
 				ref.used = append(ref.used, repeatString(dash+noDash, count)...)
+				i += count - 1
 			}
 			return true, nil
 		}
@@ -285,7 +320,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			}
 		}
 		if strings.HasPrefix(f, "-") && f != "-" {
-			if h.singleDash {
+			if h.singleDash && utf8.RuneCountInString(f[1:]) > 1 {
 				handled, err := longFlag("-", f[1:])
 				if err != nil {
 					return err
@@ -298,36 +333,20 @@ func (h *FlagHandler) parseFlags(i int) error {
 				potentialFlags := f[1:]
 				for len(potentialFlags) > 0 {
 					r, size := utf8.DecodeRuneInString(potentialFlags)
-					ref, ok := h.shortFlags[string(r)]
-					if !ok {
-						return UsageError(errors.Errorf("Flag -%c (in %s) not defined", r, f))
-					}
-					fmt.Printf("XXX ref for -%c: %+v\n", r, ref)
-					switch {
-					case ref.isBool:
-						ref.values = append(ref.values, "t")
-						ref.used = append(ref.used, "-"+string(r))
-					case ref.IsCounter:
-						ref.values = append(ref.values, "")
-						ref.used = append(ref.used, "-"+string(r))
-					default:
-						count := 1
-						if ref.explode != 0 {
-							count = ref.explode
-						}
-						if i+count >= len(os.Args) {
-							return errors.Errorf("Expecting %d positional arguments after -%c (in %s), but only %d are available",
-								count, r, f, len(os.Args)-i-1)
-						}
-						i++
-						fmt.Println("XXX CAPTURING", string(r), os.Args[i:i+count])
-						ref.values = append(ref.values, os.Args[i:i+count]...)
-						ref.used = append(ref.used, repeatString("-"+string(r), count)...)
+					err := handleShort(string(r), fmt.Sprintf(
+						"-%c (in %s)", r, f))
+					if err != nil {
+						return err
 					}
 					potentialFlags = potentialFlags[size:]
 				}
 				continue
 			}
+			err := handleShort(f[1:], f)
+			if err != nil {
+				return err
+			}
+			continue
 		}
 		if sub, ok := h.subcommands[f]; ok {
 			fmt.Println("XXX activating subcommand", sub)
@@ -354,7 +373,16 @@ func (h *FlagHandler) parseFlags(i int) error {
 	return nil
 }
 
-func (h *FlagHandler) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag) (bool, error) {
+func (h *FlagHandler) Fill(
+	t reflect.Type,
+	v reflect.Value,
+	tag reflectutils.Tag,
+	firstOnly bool,
+) (bool, error) {
+	if tag.Tag == "" {
+		return false, nil
+	}
+	fmt.Println("XXX flag fill", t, tag)
 	switch t.Kind() {
 	case reflect.Ptr:
 		// let fill recurse for us
@@ -585,8 +613,8 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 }
 
 func (h *FlagHandler) AddConfigFile(file string, keyPath []string) (Filler, error) { return nil, nil }
-func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag) []string                { return nil } // XXX
-func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag) int                      { return 0 }
+func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool) []string          { return nil } // XXX
+func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool) int                { return 0 }
 
 func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	return h, nil

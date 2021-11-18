@@ -7,6 +7,7 @@ import (
 
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
+	"go.octolab.org/pointer"
 )
 
 // Fillers are applied recursively to structures that need
@@ -26,7 +27,7 @@ type Filler interface {
 	// and pointers or they can wait for Recurse to be called and then
 	// Fill to be called on slice items and struct fields and map values.
 	// Map keys must come from Keys() or the struct as a whole.
-	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag) (filledAnything bool, err error)
+	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstOnly bool) (filledAnything bool, err error)
 
 	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
 	// struct before any call to Fill()
@@ -38,9 +39,9 @@ type Filler interface {
 	PreConfigure(tagName string, request *Registry) error
 
 	// for filling maps
-	Keys(reflect.Type, reflectutils.Tag) []string
+	Keys(reflect.Type, reflectutils.Tag, bool) []string
 	// for filling arrays & slices
-	Len(reflect.Type, reflectutils.Tag) int
+	Len(reflect.Type, reflectutils.Tag, bool) int
 	// for source fillers.  nil,nil return means no change
 	AddConfigFile(file string, keyPath []string) (Filler, error)
 }
@@ -86,14 +87,21 @@ func (f Fillers) Pairs(tagSet reflectutils.TagSet) []fillPair {
 	return pairs
 }
 
-func (f Fillers) Len(t reflect.Type, tagSet reflectutils.TagSet) (int, func() (Fillers, error)) {
+func (f Fillers) Len(
+	t reflect.Type,
+	tagSet reflectutils.TagSet,
+	meta metaFields,
+) (int, func() (Fillers, error)) {
 	var total int
 	pairs := f.Pairs(tagSet)
 	lengths := make([]int, len(pairs))
 	for i, fp := range pairs {
-		length := fp.Filler.Len(t, fp.Tag)
+		length := fp.Filler.Len(t, fp.Tag, pointer.ValueOfBool(meta.First))
 		lengths[i] = length
 		total += length
+		if pointer.ValueOfBool(meta.First) {
+			break
+		}
 	}
 	var index int
 	var done int
@@ -116,16 +124,19 @@ func (f Fillers) Len(t reflect.Type, tagSet reflectutils.TagSet) (int, func() (F
 	}
 }
 
-func (f Fillers) Keys(t reflect.Type, tagSet reflectutils.TagSet) []string {
+func (f Fillers) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
 	var all []string
 	seen := make(map[string]struct{})
 	for _, fp := range f.Pairs(tagSet) {
-		keys := fp.Filler.Keys(t, fp.Tag)
+		keys := fp.Filler.Keys(t, fp.Tag, pointer.ValueOfBool(meta.First))
 		for _, key := range keys {
 			if _, ok := seen[key]; !ok {
 				seen[key] = struct{}{}
 				all = append(all, key)
 			}
+		}
+		if pointer.ValueOfBool(meta.First) && len(keys) != 0 {
+			break
 		}
 	}
 	return all
@@ -164,14 +175,14 @@ type fillData struct {
 	r       *Request
 	name    string
 	tags    reflectutils.TagSet
-	metaTag metaTag
+	meta    metaFields
 	fillers Fillers
 }
 
-type metaTag struct {
+type metaFields struct {
 	Name  string `pt:"0"`
-	First *bool  `pt:"priority"` // "first" or "all"
-	Desc  *bool  `pt:"desc"`     // descend if somewhat filled already?
+	First *bool  `pt:"first"` // "first" or "all"
+	Desc  *bool  `pt:"desc"`  // descend if somewhat filled already?
 }
 
 func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
@@ -179,9 +190,9 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		tags := reflectutils.SplitTag(f.Tag).Set()
-		var directive metaTag
-		err := tags.Get(x.r.metaTag).Fill(&directive)
-		fmt.Printf("XXX parse '%s'(%s), tag '%s' -> %v\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), directive)
+		var meta metaFields
+		err := tags.Get(x.r.metaTag).Fill(&meta)
+		fmt.Printf("XXX parse '%s'(%s), tag '%s' -> %v\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta)
 		if err != nil {
 			return false, errors.Wrap(err, f.Name)
 		}
@@ -189,7 +200,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 			r:       x.r,
 			name:    f.Name,
 			tags:    tags,
-			metaTag: directive,
+			meta:    meta,
 			fillers: x.fillers,
 		}.fillField(f.Type, v.FieldByIndex(f.Index))
 		if filled {
@@ -219,14 +230,14 @@ func (fillers Fillers) Recurse(name string, t reflect.Type, tagSet reflectutils.
 }
 
 func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
-	switch x.metaTag.Name {
+	switch x.meta.Name {
 	case "-":
 		return false, nil
 	case "":
 		//
 	default:
-		fmt.Println("XXX x.name", x.name, "->", x.metaTag.Name)
-		x.name = x.metaTag.Name
+		fmt.Println("XXX x.name", x.name, "->", x.meta.Name)
+		x.name = x.meta.Name
 	}
 
 	var err error
@@ -234,24 +245,25 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Println("XXX x.name", x.name)
+	fmt.Println("XXX x.name", x.name, x.meta)
 
 	var anyFilled bool
+	stopAtFirst := pointer.ValueOfBool(x.meta.First)
 	for _, fp := range x.fillers.Pairs(x.tags) {
-		filled, err := fp.Filler.Fill(t, v, fp.Tag)
-		fmt.Println("XXX FP filled", fp.Tag, filled, err)
+		filled, err := fp.Filler.Fill(t, v, fp.Tag, stopAtFirst)
+		fmt.Println("XXX FP filled", x.name, filled, fp.Tag, err)
 		if err != nil {
-			return false, err
+			return false, errors.Wrapf(err, "flll %s using %s", x.name, fp.Tag.Tag)
 		}
 		if filled {
 			anyFilled = true
-			if x.metaTag.First != nil && *x.metaTag.First {
+			if stopAtFirst {
 				break
 			}
 		}
 	}
 
-	if anyFilled && x.metaTag.Desc != nil && !*x.metaTag.Desc {
+	if anyFilled && x.meta.Desc != nil && !*x.meta.Desc {
 		return true, nil
 	}
 
@@ -275,7 +287,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		v.Set(e)
 		return true, nil
 	case reflect.Array:
-		count, recurseInSequence := x.fillers.Len(t, x.tags)
+		count, recurseInSequence := x.fillers.Len(t, x.tags, x.meta)
 		cap := v.Len()
 		elemType := t.Elem()
 		for i := 0; i < count && i < cap; i++ {
@@ -294,7 +306,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		return anyFilled, nil
 	case reflect.Slice:
-		count, recurseInSequence := x.fillers.Len(t, x.tags)
+		count, recurseInSequence := x.fillers.Len(t, x.tags, x.meta)
 		if count == 0 {
 			return false, nil
 		}
@@ -322,7 +334,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		return anyFilled, nil
 	case reflect.Map:
-		keys := x.fillers.Keys(t, x.tags)
+		keys := x.fillers.Keys(t, x.tags, x.meta)
 		if len(keys) == 0 {
 			return anyFilled, nil
 		}

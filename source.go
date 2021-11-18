@@ -46,7 +46,9 @@ type fileTag struct {
 }
 
 func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
-	if s.source == nil { return nil, nil }
+	if s.source == nil {
+		return nil, nil
+	}
 	if tag.Tag != "" {
 		var fileTag fileTag
 		err := tag.Fill(&fileTag)
@@ -72,28 +74,33 @@ func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (
 	}, nil
 }
 
-func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag) []string {
-	keys, err := s.source.Keys()
+func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, firstOnly bool) []string {
+	keys, err := nflex.SetFirstIfMulti(s.source, firstOnly).Keys()
 	if err != nil {
 		return nil
 	}
 	return keys
 }
 
-func (s FileFiller) PreWalk(string, *Request, interface{}) error                   { return nil }
+func (s FileFiller) PreWalk(string, *Request, interface{}) error           { return nil }
 func (s FileFiller) PreConfigure(tagName string, registry *Registry) error { return nil }
-func (s FileFiller) ConfigureComplete() error { return nil }
+func (s FileFiller) ConfigureComplete() error                              { return nil }
 
-func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag) int {
-	length, err := s.source.Len()
+func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstOnly bool) int {
+	length, err := nflex.SetFirstIfMulti(s.source, firstOnly).Len()
 	if err != nil {
 		return 0
 	}
 	return length
 }
 
-func (s FileFiller) Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag) (bool, error) {
-	source := s.source
+func (s FileFiller) Fill(
+	t reflect.Type,
+	v reflect.Value,
+	tag reflectutils.Tag,
+	firstOnly bool,
+) (bool, error) {
+	source := nflex.SetFirstIfMulti(s.source, firstOnly)
 	switch t.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, err := source.GetInt()
