@@ -27,7 +27,7 @@ type Filler interface {
 	// and pointers or they can wait for Recurse to be called and then
 	// Fill to be called on slice items and struct fields and map values.
 	// Map keys must come from Keys() or the struct as a whole.
-	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstOnly bool) (filledAnything bool, err error)
+	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (filledAnything bool, err error)
 
 	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
 	// struct before any call to Fill()
@@ -39,11 +39,26 @@ type Filler interface {
 	PreConfigure(tagName string, request *Registry) error
 
 	// for filling maps
-	Keys(reflect.Type, reflectutils.Tag, bool) []string
+	Keys(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) ([]string, bool)
 	// for filling arrays & slices
-	Len(reflect.Type, reflectutils.Tag, bool) int
+	Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool)
 	// for source fillers.  nil,nil return means no change
 	AddConfigFile(file string, keyPath []string) (Filler, error)
+}
+
+type fillData struct {
+	r       *Request
+	name    string
+	tags    reflectutils.TagSet
+	meta    metaFields
+	fillers Fillers
+}
+
+type metaFields struct {
+	Name    string `pt:"0"`
+	First   *bool  `pt:"first,!last"`     // default is take the first
+	Combine *bool  `pt:"combine,!single"` // for slices, maps, etc.  The default is to combine
+	Desc    *bool  `pt:"desc"`            // descend if somewhat filled already?
 }
 
 type Fillers map[string]Filler
@@ -62,10 +77,10 @@ type fillPair struct {
 	Backup string // because Tag.Tag may be empty
 }
 
-func (f Fillers) Pairs(tagSet reflectutils.TagSet) []fillPair {
+func (f Fillers) Pairs(tagSet reflectutils.TagSet, meta metaFields) []fillPair {
 	pairs := make([]fillPair, 0, len(f))
 	done := make(map[string]struct{})
-	for _, tag := range tagSet.Tags {
+	p := func(tag reflectutils.Tag) {
 		if filler, ok := f[tag.Tag]; ok {
 			pairs = append(pairs, fillPair{
 				Filler: filler,
@@ -73,6 +88,15 @@ func (f Fillers) Pairs(tagSet reflectutils.TagSet) []fillPair {
 				Backup: tag.Tag,
 			})
 			done[tag.Tag] = struct{}{}
+		}
+	}
+	if pointer.ValueOfBool(meta.First) {
+		for _, tag := range tagSet.Tags {
+			p(tag)
+		}
+	} else {
+		for i := len(tagSet.Tags) - 1; i >= 0; i-- {
+			p(tagSet.Tags[i])
 		}
 	}
 	for tag, filler := range f {
@@ -93,13 +117,18 @@ func (f Fillers) Len(
 	meta metaFields,
 ) (int, func() (Fillers, error)) {
 	var total int
-	pairs := f.Pairs(tagSet)
+	pairs := f.Pairs(tagSet, meta)
 	lengths := make([]int, len(pairs))
+	combine := pointer.ValueOfBool(meta.Combine)
+	first := pointer.ValueOfBool(meta.First)
 	for i, fp := range pairs {
-		length := fp.Filler.Len(t, fp.Tag, pointer.ValueOfBool(meta.First))
+		length, ok := fp.Filler.Len(t, fp.Tag, first, combine)
+		if !ok {
+			continue
+		}
 		lengths[i] = length
 		total += length
-		if pointer.ValueOfBool(meta.First) {
+		if !combine {
 			break
 		}
 	}
@@ -127,16 +156,21 @@ func (f Fillers) Len(
 func (f Fillers) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
 	var all []string
 	seen := make(map[string]struct{})
-	for _, fp := range f.Pairs(tagSet) {
-		keys := fp.Filler.Keys(t, fp.Tag, pointer.ValueOfBool(meta.First))
+	first := pointer.ValueOfBool(meta.First)
+	combine := pointer.ValueOfBool(meta.Combine)
+	for _, fp := range f.Pairs(tagSet, meta) {
+		keys, ok := fp.Filler.Keys(t, fp.Tag, first, combine)
+		if !ok {
+			continue
+		}
+		if !combine {
+			return keys
+		}
 		for _, key := range keys {
 			if _, ok := seen[key]; !ok {
 				seen[key] = struct{}{}
 				all = append(all, key)
 			}
-		}
-		if pointer.ValueOfBool(meta.First) && len(keys) != 0 {
-			break
 		}
 	}
 	return all
@@ -171,31 +205,26 @@ func (r *Request) fill() error {
 	return err
 }
 
-type fillData struct {
-	r       *Request
-	name    string
-	tags    reflectutils.TagSet
-	meta    metaFields
-	fillers Fillers
-}
-
-type metaFields struct {
-	Name  string `pt:"0"`
-	First *bool  `pt:"first"` // "first" or "all"
-	Desc  *bool  `pt:"desc"`  // descend if somewhat filled already?
-}
-
 func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	var anyFilled bool
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		tags := reflectutils.SplitTag(f.Tag).Set()
-		var meta metaFields
+		meta := metaFields{
+			First:   pointer.ToBool(true),
+			Combine: pointer.ToBool(true),
+		}
 		err := tags.Get(x.r.metaTag).Fill(&meta)
-		fmt.Printf("XXX parse '%s'(%s), tag '%s' -> %v\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta)
 		if err != nil {
 			return false, errors.Wrap(err, f.Name)
 		}
+		if meta.First == nil {
+			meta.First = pointer.ToBool(true)
+		}
+		if meta.Combine == nil {
+			meta.Combine = pointer.ToBool(true)
+		}
+		fmt.Printf("XXX parse '%s'(%s), tag '%s' -> %v\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta)
 		filled, err := fillData{
 			r:       x.r,
 			name:    f.Name,
@@ -247,19 +276,27 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	}
 	fmt.Println("XXX x.name", x.name, x.meta)
 
+	var isStructural bool
+	switch reflectutils.NonPointer(t).Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array:
+		isStructural = true
+	}
+
 	var anyFilled bool
-	stopAtFirst := pointer.ValueOfBool(x.meta.First)
-	for _, fp := range x.fillers.Pairs(x.tags) {
-		filled, err := fp.Filler.Fill(t, v, fp.Tag, stopAtFirst)
+	combine := pointer.ValueOfBool(x.meta.Combine)
+	first := pointer.ValueOfBool(x.meta.First)
+	for _, fp := range x.fillers.Pairs(x.tags, x.meta) {
+		filled, err := fp.Filler.Fill(t, v, fp.Tag, first, combine)
 		fmt.Println("XXX FP filled", x.name, filled, fp.Tag, err)
 		if err != nil {
 			return false, errors.Wrapf(err, "flll %s using %s", x.name, fp.Tag.Tag)
 		}
 		if filled {
 			anyFilled = true
-			if stopAtFirst {
-				break
+			if isStructural && combine {
+				continue
 			}
+			break
 		}
 	}
 

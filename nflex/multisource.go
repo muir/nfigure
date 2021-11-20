@@ -4,25 +4,30 @@ import (
 	"github.com/pkg/errors"
 )
 
-var _ Source = &MultiSource{}
+var _ CanMutate = &MultiSource{}
 
 type MultiSource struct {
 	sources []Source
 	first   bool
+	combine bool
 }
 
 func (m *MultiSource) Copy() *MultiSource {
 	n := make([]Source, len(m.sources))
 	copy(n, m.sources)
 	return &MultiSource{
-		sources: n,
 		first:   m.first,
+		combine: m.combine,
+		sources: n,
 	}
 }
 
 func NewMultiSource(sources ...Source) *MultiSource {
 	if len(sources) == 0 {
-		return &MultiSource{}
+		return &MultiSource{
+			first:   true,
+			combine: true,
+		}
 	}
 	if m, ok := sources[0].(*MultiSource); ok {
 		m = m.Copy()
@@ -30,17 +35,72 @@ func NewMultiSource(sources ...Source) *MultiSource {
 		return m
 	}
 	return &MultiSource{
+		first:   true,
+		combine: true,
 		sources: sources,
 	}
 }
 
-func SetFirstIfMulti(source Source, first bool) Source {
-	if m, ok := source.(*MultiSource); ok {
-		c := m.Copy()
-		c.first = first
-		return c
+func (m *MultiSource) Mutate(mutation Mutation) Source {
+	n := &MultiSource{
+		first:   m.first,
+		combine: m.combine,
+		sources: make([]Source, len(m.sources)),
 	}
-	return source
+	for i, source := range m.sources {
+		n.sources[i] = mutation.Apply(source)
+	}
+	return n
+}
+
+// MultiSourceSetFirst sets the priority for which source is
+// evaluated first for MultiSource sources.  For scalars (int,
+// string, etc), the first evaluated source that has a value is the value returned.
+// The default is first=true which means that the first (not
+// last) source wins.
+func MultiSourceSetFirst(first bool) Mutation {
+	return func(source Source) Source {
+		if m, ok := source.(*MultiSource); ok {
+			if m.first == first {
+				return source
+			}
+			c := m.Copy()
+			c.first = first
+			return c
+		}
+		return source
+	}
+}
+
+// MultiSourceSetCombine sets the behvior for which how many sources
+// are used for slices and maps in a MultiSource.  The default
+// is true: slices and maps are combined.  Slices are appended and
+// maps are combined.
+//
+// If combine is false there can be some surprising behavior because
+// paths may exist beyond what keys says.  For example, suppose
+// we have two objects:
+//
+//	one:
+//		map:
+//			key1: value1
+//	two:
+//		map:
+//			key2: value2
+//
+// With combine=false, keys(map) = [key1] but lookup(map.key2) = value2
+func MultiSourceSetCombine(combine bool) Mutation {
+	return func(source Source) Source {
+		if m, ok := source.(*MultiSource); ok {
+			if m.combine == combine {
+				return source
+			}
+			c := m.Copy()
+			c.combine = combine
+			return c
+		}
+		return source
+	}
 }
 
 // CombineSources expects any MultiSource to be the first source
@@ -79,8 +139,9 @@ func (m *MultiSource) Recurse(keys ...string) Source {
 		return nil
 	}
 	return &MultiSource{
-		sources: n,
 		first:   m.first,
+		combine: m.combine,
+		sources: n,
 	}
 }
 
@@ -153,22 +214,26 @@ func (m *MultiSource) Keys(keys ...string) ([]string, error) {
 	if len(m.sources) == 1 {
 		return m.sources[0].Keys(keys...)
 	}
+	if !m.combine {
+		if source, ok := m.find(keys); ok {
+			return source.Keys(keys...)
+		}
+		return nil, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
+	}
 	results := make([][]string, len(m.sources))
 	var total int
 	var able int
 	for i, source := range m.sources {
-		if source.Exists(keys...) {
-			found, err := source.Keys(keys...)
-			if err != nil {
-				return nil, err
-			}
-			if m.first {
-				return found, nil
-			}
-			results[i] = found
-			total += len(found)
-			able++
+		if !source.Exists(keys...) {
+			continue
 		}
+		found, err := source.Keys(keys...)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = found
+		total += len(found)
+		able++
 	}
 	if able == 0 {
 		return nil, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
@@ -191,20 +256,24 @@ func (m *MultiSource) Len(keys ...string) (int, error) {
 	if len(m.sources) == 1 {
 		return m.sources[0].Len(keys...)
 	}
+	if !m.combine {
+		if source, ok := m.find(keys); ok {
+			return source.Len(keys...)
+		}
+		return 0, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)
+	}
 	var able int
 	var total int
 	for _, source := range m.sources {
-		if source.Exists(keys...) {
-			l, err := source.Len(keys...)
-			if err != nil {
-				return 0, err
-			}
-			if m.first {
-				return l, nil
-			}
-			total += l
-			able++
+		if !source.Exists(keys...) {
+			continue
 		}
+		l, err := source.Len(keys...)
+		if err != nil {
+			return 0, err
+		}
+		total += l
+		able++
 	}
 	if able == 0 {
 		return 0, errors.Wrapf(ErrDoesNotExist, "key %v does not exist", keys)

@@ -9,15 +9,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-type EnvFiller struct {
-	tag   string
-	split string
+type LookupFiller struct {
+	lookup func(string) (string, bool, error)
 }
 
 func NewEnvFiller() Filler {
-	return EnvFiller{
-		tag:   "env",
-		split: ",",
+	return NewLookupFillerSimple(os.LookupEnv)
+}
+
+func NewLookupFillerSimple(lookup func(string) (string, bool)) Filler {
+	return LookupFiller{
+		lookup: func(s string) (string, bool, error) {
+			got, ok := lookup(s)
+			return got, ok, nil
+		},
+	}
+}
+
+func NewLookupFiller(lookup func(string) (string, bool, error)) Filler {
+	return LookupFiller{
+		lookup: lookup,
 	}
 }
 
@@ -26,11 +37,12 @@ type envTag struct {
 	Split    string `pt:"split"`
 }
 
-func (e EnvFiller) Fill(
+func (e LookupFiller) Fill(
 	t reflect.Type,
 	v reflect.Value,
 	tag reflectutils.Tag,
-	firstOnly bool,
+	firstFirst bool,
+	combineObjects bool,
 ) (bool, error) {
 	if tag.Tag == "" {
 		return false, nil
@@ -38,13 +50,16 @@ func (e EnvFiller) Fill(
 	var tagData envTag
 	err := tag.Fill(&tagData)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", e.tag)
+		return false, errors.Wrapf(err, "%s tag", tag.Tag)
 	}
 	fmt.Println("XXX env fill", tag, "->", tagData)
 	if tagData.Variable == "" {
 		return false, nil
 	}
-	value, ok := os.LookupEnv(tagData.Variable)
+	value, ok, err := e.lookup(tagData.Variable)
+	if err != nil {
+		return false, errors.Wrapf(err, tag.Tag)
+	}
 	if !ok {
 		fmt.Println("XXX not set", tagData.Variable)
 		return false, nil
@@ -56,19 +71,21 @@ func (e EnvFiller) Fill(
 	}
 	setter, err := reflectutils.MakeStringSetter(t, ssa...)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", e.tag)
+		return false, errors.Wrapf(err, "%s tag", tag.Tag)
 	}
 	err = setter(v, value)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", e.tag)
+		return false, errors.Wrapf(err, "%s tag", tag.Tag)
 	}
 	return true, nil
 }
 
-func (e EnvFiller) Len(reflect.Type, reflectutils.Tag, bool) int                   { return 0 }
-func (e EnvFiller) Keys(reflect.Type, reflectutils.Tag, bool) []string             { return nil }
-func (e EnvFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }
-func (e EnvFiller) AddConfigFile(string, []string) (Filler, error)                 { return e, nil }
-func (e EnvFiller) PreWalk(string, *Request, interface{}) error                    { return nil }
-func (e EnvFiller) PreConfigure(string, *Registry) error                           { return nil }
-func (s EnvFiller) ConfigureComplete() error                                       { return nil }
+func (e LookupFiller) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false } // XXX
+func (e LookupFiller) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
+	return nil, false
+}                                                                                     // XXX
+func (e LookupFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }
+func (e LookupFiller) AddConfigFile(string, []string) (Filler, error)                 { return e, nil }
+func (e LookupFiller) PreWalk(string, *Request, interface{}) error                    { return nil }
+func (e LookupFiller) PreConfigure(string, *Registry) error                           { return nil }
+func (s LookupFiller) ConfigureComplete() error                                       { return nil }

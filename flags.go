@@ -377,7 +377,8 @@ func (h *FlagHandler) Fill(
 	t reflect.Type,
 	v reflect.Value,
 	tag reflectutils.Tag,
-	firstOnly bool,
+	firstFirst bool,
+	combineObjects bool,
 ) (bool, error) {
 	if tag.Tag == "" {
 		return false, nil
@@ -398,7 +399,7 @@ func (h *FlagHandler) Fill(
 		return false, err
 	}
 	var found bool
-	isMap := nonPointer(t).Kind() == reflect.Map
+	isMap := reflectutils.NonPointer(t).Kind() == reflect.Map
 	for _, n := range ref.Name {
 		var m *map[string]*flagRef
 		if isMap {
@@ -544,7 +545,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 			walkErr = err
 			return true
 		}
-		t := nonPointer(f.Type)
+		t := reflectutils.NonPointer(f.Type)
 		setterType := t
 		switch t.Kind() {
 		case reflect.Bool:
@@ -613,8 +614,10 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 }
 
 func (h *FlagHandler) AddConfigFile(file string, keyPath []string) (Filler, error) { return nil, nil }
-func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool) []string          { return nil } // XXX
-func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool) int                { return 0 }
+func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
+	return nil, false
+}                                                                                 // XXX
+func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false } // XXX
 
 func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	return h, nil

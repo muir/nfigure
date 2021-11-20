@@ -74,33 +74,42 @@ func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (
 	}, nil
 }
 
-func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, firstOnly bool) []string {
-	keys, err := nflex.SetFirstIfMulti(s.source, firstOnly).Keys()
+func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, first, combine bool) ([]string, bool) {
+	source := nflex.MultiSourceSetFirst(first).
+		Combine(nflex.MultiSourceSetCombine(combine)).
+		Apply(s.source)
+	keys, err := source.Keys()
 	if err != nil {
-		return nil
+		return nil, false
 	}
-	return keys
+	return keys, source.Exists()
 }
 
 func (s FileFiller) PreWalk(string, *Request, interface{}) error           { return nil }
 func (s FileFiller) PreConfigure(tagName string, registry *Registry) error { return nil }
 func (s FileFiller) ConfigureComplete() error                              { return nil }
 
-func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstOnly bool) int {
-	length, err := nflex.SetFirstIfMulti(s.source, firstOnly).Len()
+func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool) {
+	source := nflex.MultiSourceSetFirst(firstFirst).
+		Combine(nflex.MultiSourceSetCombine(combineObjects)).
+		Apply(s.source)
+	length, err := source.Len()
 	if err != nil {
-		return 0
+		return 0, false
 	}
-	return length
+	return length, source.Exists()
 }
 
 func (s FileFiller) Fill(
 	t reflect.Type,
 	v reflect.Value,
 	tag reflectutils.Tag,
-	firstOnly bool,
+	firstFirst bool,
+	combineObjects bool,
 ) (bool, error) {
-	source := nflex.SetFirstIfMulti(s.source, firstOnly)
+	source := nflex.MultiSourceSetFirst(firstFirst).
+		Combine(nflex.MultiSourceSetCombine(combineObjects)).
+		Apply(s.source)
 	switch t.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, err := source.GetInt()

@@ -4,7 +4,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var _ Source = &prefixSource{}
+var _ CanMutate = &prefixSource{}
 
 type prefixSource struct {
 	prefix []string
@@ -20,6 +20,13 @@ func NewPrefixSource(source Source, prefix ...string) Source {
 	return prefixSource{
 		prefix: prefix,
 		source: source,
+	}
+}
+
+func (m prefixSource) Mutate(mutation Mutation) Source {
+	return prefixSource{
+		prefix: m.prefix,
+		source: mutation.Apply(m.source),
 	}
 }
 

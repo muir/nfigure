@@ -16,10 +16,10 @@ func TestMetaFirstScalar(t *testing.T) {
 	require.NoError(t, os.Setenv("H", "34"), "set H")
 	require.NoError(t, os.Setenv("I", "54"), "set I")
 	type testData struct {
-		G int `env:"G" flag:"G" meta:",first"`
-		H int `env:"H" flag:"H"`
-		I int `env:"I" nf:"I"`
-		J int `nf:"j" meta:",first"`
+		G int `env:"G" flag:"G"        meta:",first"`
+		H int `env:"H" flag:"H"        meta:",last"`
+		I int `env:"I"          nf:"I" meta:",last"`
+		J int `                 nf:"j" meta:",first"`
 	}
 	var got testData
 	want := testData{
@@ -48,4 +48,3 @@ func TestMetaFirstScalar(t *testing.T) {
 	assert.Equal(t, want, got, "config results")
 	assert.Equal(t, 1, called, "called")
 }
-

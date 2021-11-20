@@ -83,34 +83,6 @@ func TestMultiDuplicateSimple(t *testing.T) {
 		s, "a")
 }
 
-func TestMultiFirst(t *testing.T) {
-	j, err := UnmarshalFile("common.json", WithFS(content))
-	require.NoError(t, err, "open common.json")
-	y, err := UnmarshalFile("common.yaml", WithFS(content))
-	require.NoError(t, err, "open common.yaml")
-	s := SetFirstIfMulti(NewMultiSource(j, y), true)
-	checkList(t, stds, s, "a", "b")
-	checkList(t,
-		[]expectation{
-			{
-				path: []string{"b", "a"},
-				cmd:  "len",
-				want: 2,
-			},
-			{
-				path: []string{"b", "d"},
-				cmd:  "keys",
-				want: []string{"j"},
-			},
-			{
-				path: []string{"b", "d", "j"},
-				cmd:  "string",
-				want: "json",
-			},
-		},
-		s, "a")
-}
-
 func key(prefix []string, more ...string) []string {
 	n := make([]string, len(prefix), len(prefix)+len(more))
 	copy(n, prefix)
