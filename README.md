@@ -1,5 +1,7 @@
 # nfigure - per-library configuration
 
+# incomplete work-in-progress, not ready to be used
+
 [![GoDoc](https://godoc.org/github.com/muir/nfigure?status.png)](https://pkg.go.dev/github.com/muir/nfigure)
 ![unit tests](https://github.com/muir/nfigure/actions/workflows/go.yml/badge.svg)
 [![report card](https://goreportcard.com/badge/github.com/muir/nfigure)](https://goreportcard.com/report/github.com/muir/nfigure)
