@@ -7,3 +7,13 @@ func repeatString(s string, count int) []string {
 	}
 	return r
 }
+
+func notEmpty(strings ...string) []string {
+	n := make([]string, 0, len(strings))
+	for _, s := range strings {
+		if s != "" {
+			n = append(n, s)
+		}
+	}
+	return n
+}

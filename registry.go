@@ -1,7 +1,6 @@
 package nfigure
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/muir/nfigure/nflex"
@@ -83,8 +82,9 @@ func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
 		registryConfig: registryConfig{
 			fillers: Fillers{
-				"env":    NewEnvFiller(),
-				"source": NewFileFiller(),
+				"env":     NewEnvFiller(),
+				"source":  NewFileFiller(),
+				"default": NewDefaultFiller(),
 			},
 		},
 	}
@@ -109,12 +109,14 @@ func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	return nil
 }
 
+/* TODO
 // Any type that implements ConfigureReactive that is filled in during
 // the configuration process will have React invoked upon it after filling
 // and after validation.
 type ConfigureReactive interface {
 	React(*Registry) error
 }
+*/
 
 // Configure evaluates all configuration requests.  New configuration
 // requests can be added while configure is running.  For example,
@@ -123,7 +125,6 @@ type ConfigureReactive interface {
 // only be used for configuration that has not already happened.
 func (r *Registry) Configure() error {
 	r.configureStarted = true
-	fmt.Println("XXX lenReq", r.lenRequests())
 	for i := 0; i < r.lenRequests(); i++ {
 		request := r.getRequest(i)
 		err := r.preWalk(request)
@@ -172,7 +173,6 @@ func (r *Registry) preWalk(request *Request) error {
 }
 
 func (r *Registry) preWalkLocked(request *Request) error {
-	fmt.Println("XXX all prewalk")
 	for tag, filler := range request.getFillersLocked() {
 		err := filler.PreWalk(tag, request, request.object)
 		if err != nil {

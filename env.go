@@ -1,7 +1,6 @@
 package nfigure
 
 import (
-	"fmt"
 	"os"
 	"reflect"
 
@@ -10,23 +9,29 @@ import (
 )
 
 type LookupFiller struct {
-	lookup func(string) (string, bool, error)
+	lookup func(value string, tag string) (string, bool, error)
 }
 
 func NewEnvFiller() Filler {
 	return NewLookupFillerSimple(os.LookupEnv)
 }
 
+func NewDefaultFiller() Filler {
+	return NewLookupFiller(func(_, tag string) (string, bool, error) {
+		return tag, true, nil
+	})
+}
+
 func NewLookupFillerSimple(lookup func(string) (string, bool)) Filler {
 	return LookupFiller{
-		lookup: func(s string) (string, bool, error) {
+		lookup: func(s string, _ string) (string, bool, error) {
 			got, ok := lookup(s)
 			return got, ok, nil
 		},
 	}
 }
 
-func NewLookupFiller(lookup func(string) (string, bool, error)) Filler {
+func NewLookupFiller(lookup func(value string, tag string) (string, bool, error)) Filler {
 	return LookupFiller{
 		lookup: lookup,
 	}
@@ -52,19 +57,16 @@ func (e LookupFiller) Fill(
 	if err != nil {
 		return false, errors.Wrapf(err, "%s tag", tag.Tag)
 	}
-	fmt.Println("XXX env fill", tag, "->", tagData)
 	if tagData.Variable == "" {
 		return false, nil
 	}
-	value, ok, err := e.lookup(tagData.Variable)
+	value, ok, err := e.lookup(tagData.Variable, tag.Value)
 	if err != nil {
 		return false, errors.Wrapf(err, tag.Tag)
 	}
 	if !ok {
-		fmt.Println("XXX not set", tagData.Variable)
 		return false, nil
 	}
-	fmt.Println("XXX lookup", tagData.Variable, ":", value)
 	var ssa []reflectutils.StringSetterArg
 	if tagData.Split != "" {
 		ssa = append(ssa, reflectutils.WithSplitOn(tagData.Split))
@@ -80,10 +82,45 @@ func (e LookupFiller) Fill(
 	return true, nil
 }
 
-func (e LookupFiller) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false } // XXX
+func (e LookupFiller) Len(
+	t reflect.Type,
+	tag reflectutils.Tag,
+	firstFirst bool,
+	combineObjects bool,
+) (int, bool) {
+	return lenThroughFill(e, t, tag, firstFirst, combineObjects)
+}
+
+func lenThroughFill(
+	f Filler,
+	t reflect.Type,
+	tag reflectutils.Tag,
+	firstFirst bool,
+	combineObjects bool,
+) (int, bool) {
+	switch reflectutils.NonPointer(t).Kind() {
+	case reflect.Array, reflect.Slice:
+	//
+	default:
+		return 0, false
+	}
+	v := reflect.New(t).Elem()
+	filled, err := f.Fill(t, v, tag, firstFirst, combineObjects)
+	if err != nil {
+		return 0, false
+	}
+	if !filled {
+		return 0, false
+	}
+	for v.Type().Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	return v.Len(), true
+}
+
 func (e LookupFiller) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
 	return nil, false
-}                                                                                     // XXX
+}
 func (e LookupFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }
 func (e LookupFiller) AddConfigFile(string, []string) (Filler, error)                 { return e, nil }
 func (e LookupFiller) PreWalk(string, *Request, interface{}) error                    { return nil }

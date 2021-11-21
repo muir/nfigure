@@ -1,7 +1,6 @@
 package nfigure
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -56,7 +55,6 @@ func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error 
 			return err
 		}
 	}
-	fmt.Printf("XXX requested %T\n", model)
 	return nil
 }
 
@@ -91,7 +89,6 @@ func (r *Request) getFillersLocked() Fillers {
 		if filler == nil {
 			delete(fillers, tag)
 		} else {
-			fmt.Println("XXX overriding filler", tag)
 			fillers[tag] = filler
 		}
 	}

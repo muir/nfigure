@@ -9,192 +9,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/muir/nject/nject"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
 
-type FlagHandler struct {
-	fhInheritable
-	Parent             *FlagHandler // set only for subcommands
-	subcommands        map[string]*FlagHandler
-	longFlags          map[string]*flagRef
-	shortFlags         map[string]*flagRef
-	mapFlags           map[string]*flagRef
-	mapRE              *regexp.Regexp
-	remainder          []string
-	onActivate         func(*Registry, *FlagHandler) error
-	onStart            func(*Registry, *FlagHandler, []string) error
-	delayedErr         error
-	configModel        interface{}
-	selectedSubcommand string
-}
-
-type fhInheritable struct {
-	tagName       string
-	registry      *Registry
-	stopOnNonFlag bool
-	doubleDash    bool
-	singleDash    bool
-	combineShort  bool
-	negativeNo    bool
-}
-
-type flagTag struct {
-	Name      []string `pt:"0,split=space"`
-	Split     string   `pt:"split"` // special value: explode, quote, space, comma
-	IsCounter bool     `pt:"counter"`
-}
-
-type flagRef struct {
-	flagTag
-	isBool  bool
-	isSlice bool
-	isMap   bool
-	explode int // for arrays only
-	setters map[setterKey]func(reflect.Value, string) error
-	values  []string
-	used    []string
-	keys    []string
-}
-
-type setterKey struct {
-	typ reflect.Type
-	tag string
-}
-
-var _ Filler = &FlagHandler{}
-
-// PosixFlagHandler creates and configures a flaghandler that
-// requires long options to be preceeded with a double-dash
-// and will combine short flags together.
-//
-// Long-form booleans can be set to false with a "no-" prefix.
-//
-//	tar -xvf f.tgz --numeric-owner --hole-detection=raw --ownermap ownerfile --no-overwrite-dir
-//
-func PosixFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
-	h := &FlagHandler{
-		fhInheritable: fhInheritable{
-			doubleDash:   true,
-			combineShort: true,
-			negativeNo:   true,
-		},
-	}
-	h.init()
-	h.delayedErr = h.opts(opts)
-	return h
-}
-
-func GoFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
-	h := &FlagHandler{
-		fhInheritable: fhInheritable{
-			doubleDash: true,
-			singleDash: true,
-		},
-	}
-	h.init()
-	h.delayedErr = h.opts(opts)
-	return h
-}
-
-func (h *FlagHandler) init() {
-	h.subcommands = make(map[string]*FlagHandler)
-	h.longFlags = make(map[string]*flagRef)
-	h.shortFlags = make(map[string]*flagRef)
-	h.mapFlags = make(map[string]*flagRef)
-}
-
-func (h *FlagHandler) opts(opts []FlaghandlerOptArg) error {
-	for _, f := range opts {
-		err := f(h)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
-	fmt.Println("XXX preconfigure")
-	h.tagName = tagName
-	h.registry = registry
-	if h.delayedErr != nil {
-		return h.delayedErr
-	}
-	if h.configModel != nil {
-		err := registry.Request(h.configModel)
-		if err != nil {
-			return err
-		}
-	}
-	if h.onActivate != nil {
-		err := h.onActivate(registry, h)
-		if err != nil {
-			return err
-		}
-	}
-	return h.parseFlags(0)
-}
-
-func (h *FlagHandler) ConfigureComplete() error {
-	if h.selectedSubcommand != "" {
-		err := h.subcommands[h.selectedSubcommand].ConfigureComplete()
-		if err != nil {
-			return errors.Wrap(err, h.selectedSubcommand)
-		}
-	}
-	if h.onStart != nil {
-		err := h.onStart(h.registry, h, h.remainder)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-type FlaghandlerOptArg func(*FlagHandler) error
-
-// OnActivate is called before flags are parsed.  It's mostly for subcommands.  The
-// callback will be invoked as soon as it is known that the subcommand is being
-// used.
-func OnActivate(chain ...interface{}) FlaghandlerOptArg {
-	return func(h *FlagHandler) error {
-		return nject.Sequence("default-error-responder",
-			nject.Provide("default-error", func() nject.TerminalError {
-				return nil
-			})).Append("on-activate", chain...).Bind(&h.onActivate, nil)
-	}
-}
-
-func OnStart(chain ...interface{}) FlaghandlerOptArg {
-	return func(h *FlagHandler) error {
-		return nject.Sequence("default-error-responder",
-			nject.Provide("default-error", func() nject.TerminalError {
-				return nil
-			})).Append("on-start", chain...).Bind(&h.onStart, nil)
-	}
-}
-
-func (h *FlagHandler) AddSubcommand(command string, configModel interface{}, opts ...FlaghandlerOptArg) (*FlagHandler, error) {
-	if configModel != nil {
-		v := reflect.ValueOf(configModel)
-		if !v.IsValid() || v.IsNil() || v.Type().Kind() != reflect.Ptr || v.Type().Elem().Kind() != reflect.Struct {
-			return nil, errors.Errorf("configModel must be a nil or a non-nil pointer to a struct, not %T", configModel)
-		}
-	}
-	sub := &FlagHandler{
-		fhInheritable: h.fhInheritable,
-		Parent:        h,
-		configModel:   configModel,
-	}
-	h.subcommands[command] = sub
-	sub.init()
-	return sub, sub.opts(opts)
-}
-
 func (h *FlagHandler) parseFlags(i int) error {
-	fmt.Println("XXX parseflags", i)
 	var remainder []string
 
 	if len(h.mapFlags) > 0 {
@@ -210,13 +29,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 	}
 
 	handleShort := func(flag string, inErr string) error {
-		fmt.Println("XXX lookup short flag", flag)
 		ref, ok := h.shortFlags[flag]
 		if !ok {
-			fmt.Println("XXX failure for", flag)
 			return UsageError(errors.Errorf("Flag %s not defined", inErr))
 		}
-		fmt.Printf("XXX ref for %s: %+v\n", inErr, ref)
 		switch {
 		case ref.isBool:
 			ref.values = append(ref.values, "t")
@@ -234,7 +50,6 @@ func (h *FlagHandler) parseFlags(i int) error {
 					count, inErr, len(os.Args)-i-1)
 			}
 			i++
-			fmt.Println("XXX CAPTURING", inErr, os.Args[i:i+count])
 			ref.values = append(ref.values, os.Args[i:i+count]...)
 			ref.used = append(ref.used, repeatString("-"+flag, count)...)
 			i += count - 1
@@ -279,7 +94,6 @@ func (h *FlagHandler) parseFlags(i int) error {
 			default:
 				count := 1
 				if ref.explode != 0 {
-					fmt.Println("XXX explode", ref.explode)
 					count = ref.explode
 				}
 				if i+count >= len(os.Args) {
@@ -305,7 +119,6 @@ func (h *FlagHandler) parseFlags(i int) error {
 
 	for ; i < len(os.Args); i++ {
 		f := os.Args[i]
-		fmt.Println("XXX parse", f)
 		if f == "--" {
 			remainder = os.Args[i+1:]
 			break
@@ -349,7 +162,6 @@ func (h *FlagHandler) parseFlags(i int) error {
 			continue
 		}
 		if sub, ok := h.subcommands[f]; ok {
-			fmt.Println("XXX activating subcommand", sub)
 			if sub.configModel != nil {
 				err := h.registry.Request(sub.configModel,
 					WithFiller(h.tagName, sub))
@@ -383,7 +195,6 @@ func (h *FlagHandler) Fill(
 	if tag.Tag == "" {
 		return false, nil
 	}
-	fmt.Println("XXX flag fill", t, tag)
 	switch t.Kind() {
 	case reflect.Ptr:
 		// let fill recurse for us
@@ -422,7 +233,6 @@ func (h *FlagHandler) Fill(
 			found = true
 			continue
 		}
-		fmt.Println("XXX lookup setter", t, tag.Tag, "in", ref.Name)
 		setter, ok := ref.setters[setterKey{
 			typ: t,
 			tag: tag.Tag,
@@ -430,13 +240,10 @@ func (h *FlagHandler) Fill(
 		if !ok {
 			return false, errors.Errorf("internal error: Missing setter for -%s", n)
 		}
-		fmt.Println("XXX filling", tag)
-		fmt.Printf("XXX fill with %+v\n", ref)
 		if ref.IsCounter {
 			var count int
 			var err error
 			for i, value := range ref.values {
-				fmt.Println("XXX counter value", value)
 				if value == "" {
 					count++
 					continue
@@ -481,7 +288,6 @@ func (h *FlagHandler) Fill(
 				}
 				m.SetMapIndex(reflect.Indirect(kp), reflect.Indirect(ep))
 			}
-			fmt.Println("XXX v is", v.Type(), v.CanSet(), v.CanAddr(), "t is", t)
 			v.Set(m)
 			return true, nil
 		}
@@ -507,7 +313,6 @@ func (h *FlagHandler) Fill(
 				return false, errors.Errorf("internal error: not expecting %s", t)
 			}
 			for i, value := range ref.values {
-				fmt.Println("XXX VALUE", i, value)
 				err := setElem(a.Index(i), value)
 				if err != nil {
 					return false, UsageError(errors.Wrap(err, ref.used[i]))
@@ -515,10 +320,8 @@ func (h *FlagHandler) Fill(
 			}
 			return true, nil
 		}
-		fmt.Println("XXX calling setter")
 		err := setter(v, ref.values[len(ref.values)-1])
 		if err != nil {
-			fmt.Println("XXX setter err", err)
 			return false, errors.Wrap(err, ref.used[len(ref.values)-1])
 		}
 		return true, nil
@@ -530,7 +333,6 @@ func (h *FlagHandler) Fill(
 }
 
 func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{}) error {
-	fmt.Println("XXX prewalk", tagName, reflect.TypeOf(model))
 	v := reflect.ValueOf(model)
 	var walkErr error
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
@@ -540,6 +342,10 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 			},
 		}
 		tag := reflectutils.SplitTag(f.Tag).Set().Get(tagName)
+		if tag.Tag == "" {
+			return true
+		}
+		h.rawData = append(h.rawData, f)
 		err := tag.Fill(&ref)
 		if err != nil {
 			walkErr = err
@@ -599,13 +405,11 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				// hmm, this flag is defined more than once!
 				existing.isBool = existing.isBool && ref.isBool
 				existing.setters[sk] = setter
-				fmt.Println("XXX set setter", f.Type, tag.Tag, "in", n)
 			} else {
 				ref.setters = map[setterKey]func(reflect.Value, string) error{
 					sk: setter,
 				}
 				(*m)[n] = &ref
-				fmt.Println("XXX set setter", f.Type, tag.Tag, "in", n)
 			}
 		}
 		return true
@@ -616,8 +420,8 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 func (h *FlagHandler) AddConfigFile(file string, keyPath []string) (Filler, error) { return nil, nil }
 func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
 	return nil, false
-}                                                                                 // XXX
-func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false } // XXX
+}
+func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false }
 
 func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	return h, nil

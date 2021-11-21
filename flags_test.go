@@ -234,7 +234,7 @@ func TestFlags(t *testing.T) {
 			subcalled := make(map[string]int)
 			for sub, model := range tc.subcommands {
 				sub, model := sub, model
-				fh.AddSubcommand(sub, model, OnStart(func(args []string) {
+				fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
 					assert.Equal(t, tc.remaining, args, "remaining args in "+sub)
 					subcalled[sub]++
 				}))

@@ -55,7 +55,7 @@ func TestBasicFlags(t *testing.T) {
 		K bool `flag:"k"`
 	}
 	var called int
-	os.Args = strings.Split("-ijk 33 45 xyz abc", " ")
+	os.Args = strings.Split("program -ijk 33 45 xyz abc", " ")
 	fh := PosixFlagHandler(OnStart(func(args []string) {
 		assert.Equal(t, []string{"xyz", "abc"}, args, "remaining args")
 		called++
@@ -68,4 +68,15 @@ func TestBasicFlags(t *testing.T) {
 	assert.Equal(t, 45, testData.J, "j")
 	assert.True(t, testData.K, "k")
 	assert.Equal(t, 1, called, "onstart call count")
+}
+
+func TestBasicDefaul(t *testing.T) {
+	var testData struct {
+		C complex128 `default:"3+7i"`
+	}
+	registry := NewRegistry()
+	registry.Request(&testData)
+	err := registry.Configure()
+	require.NoError(t, err, "configure")
+	assert.Equal(t, 3+7i, testData.C, "C")
 }

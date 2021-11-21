@@ -265,7 +265,6 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	case "":
 		//
 	default:
-		fmt.Println("XXX x.name", x.name, "->", x.meta.Name)
 		x.name = x.meta.Name
 	}
 
@@ -274,7 +273,6 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Println("XXX x.name", x.name, x.meta)
 
 	var isStructural bool
 	switch reflectutils.NonPointer(t).Kind() {
@@ -313,14 +311,11 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		fmt.Println("XXX t is", t, "e is", e.Elem().Type())
 		filled, err := x.fillField(t.Elem(), e.Elem())
 		if err != nil {
-			fmt.Println("XXX ptr filling err", err)
 			return false, err
 		}
 		if !filled {
-			fmt.Println("XXX ptr not filled")
 			return false, nil
 		}
-		fmt.Println("XXX filled ptr")
 		v.Set(e)
 		return true, nil
 	case reflect.Array:
