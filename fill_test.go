@@ -28,7 +28,7 @@ func TestMetaFirstScalar(t *testing.T) {
 		I: 30, // from source2 (last)
 		J: 12, // from source (first)
 	}
-	os.Args = strings.Split("-G 13 -H 14", " ")
+	os.Args = strings.Split("pgrm -G 13 -H 14", " ")
 	var called int
 	fh := PosixFlagHandler(OnStart(func(args []string) {
 		assert.Equal(t, ([]string)(nil), args, "remaining args")

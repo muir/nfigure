@@ -21,6 +21,56 @@ import (
 // 4. Fill()
 // 5. ConfigureComplete()
 
+// Flaghandler is the common type for both PosixFlagHanlder() and GoFlagHandler().
+// The set of flags are found in struct tags, by default with the "flag" prefix.
+//
+//	type MyFlags struct {
+//		Verbose  int      `flag:"v verbose,counter"`    // each "-v" or "--verbose" increments the integer
+//		Comments []string `flag:"comment c,split=none"` // "-c value" and "--comment value" can be given multiple times
+//	}
+//
+// The first argument after flag: is the name or names of the flag.  After
+// that there are options.  The supported options are:
+//
+// "map=explode|prefix": specifies how to handle map types.  With "map=explode",
+// key/value pairs are given as arguments after the flag:
+//
+//	type MyFlags struct {
+//		Env map[string]string `flag:"env e,map=explode,split=equals"`
+//	}
+//
+//	cmd --env FOO=bar --env XYZ=yes -e MORE=totally
+//
+// With "map=prefix", the values are combined into the flag:
+//
+//	type MyFlags struct {
+//		Defs map[string]string `flag:"D,map=prefix"`
+//	}
+//
+//	cmd -DFOO=bar -DXYZ=yes -DMORE=totally
+//
+// The default is "map=explode"
+//
+// "split=x": For arrays, slices, and maps, changes how single
+// values are split into groups.
+//
+// The special values of "none", "equal", "equals", "comma", "quote",
+// and "space" translate to obvious values.
+//
+// The default value is "," for arrays and slices and "=" for maps.  For
+// "map=prefix", only "=" is supported.
+//
+// To indicate that a numeric value is a counter, use "counter".
+//
+// To indicate that a value is required as a flag, use "required".
+//
+// To tweak the usage message describing the value use "argName=name".
+//
+//	struct MyFlags struct {
+//		Depth      int `flag:"depth,required,argName=levels"`
+//		DebugLevel int `flag:"d,counter"`
+//	}
+//
 type FlagHandler struct {
 	fhInheritable
 	Parent             *FlagHandler // set only for subcommands
@@ -28,7 +78,7 @@ type FlagHandler struct {
 	subcommandsOrder   []string
 	longFlags          map[string]*flagRef
 	shortFlags         map[string]*flagRef
-	mapFlags           map[string]*flagRef
+	mapFlags           map[string]*flagRef // only when map=prefix
 	rawData            []reflect.StructField
 	mapRE              *regexp.Regexp
 	remainder          []string
@@ -54,7 +104,8 @@ type fhInheritable struct {
 
 type flagTag struct {
 	Name      []string `pt:"0,split=space"`
-	Split     string   `pt:"split"` // special value: explode, quote, space, comma
+	Map       string   `pt:"map"`   // special value: prefix|explode
+	Split     string   `pt:"split"` // special value: explode, quote, space, comma, equal, equals, none
 	IsCounter bool     `pt:"counter"`
 	Required  bool     `pt:"required"` // flag must be used
 	ArgName   string   `pt:"argName"`  // name of the argument(s) for usage message
@@ -88,6 +139,7 @@ var _ Filler = &FlagHandler{}
 //
 //	tar -xvf f.tgz --numeric-owner --hole-detection=raw --ownermap ownerfile --no-overwrite-dir
 //
+// Flags are found using struct tags.  See the comment FlagHandler for details
 func PosixFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 	h := &FlagHandler{
 		fhInheritable: fhInheritable{
@@ -202,7 +254,7 @@ func (h *FlagHandler) AddSubcommand(command string, usageSummary string, configM
 	if configModel != nil {
 		v := reflect.ValueOf(configModel)
 		if !v.IsValid() || v.IsNil() || v.Type().Kind() != reflect.Ptr || v.Type().Elem().Kind() != reflect.Struct {
-			return nil, errors.Errorf("configModel must be a nil or a non-nil pointer to a struct, not %T", configModel)
+			return nil, ProgrammerError(errors.Errorf("configModel must be a nil or a non-nil pointer to a struct, not %T", configModel))
 		}
 	}
 	sub := &FlagHandler{
@@ -254,8 +306,16 @@ func (o opt) format(doubleDash bool) string {
 	case optionOpt:
 		b.WriteRune('-')
 		b.WriteString(o.name)
-		b.WriteRune(' ')
-		b.WriteString(o.describeArg(o.nonPointer, o.f.Name))
+		if o.nonPointer.Kind() == reflect.Map {
+			b.WriteRune('<')
+			b.WriteString(o.describeArg(o.nonPointer.Key(), o.f.Name+"-key"))
+			b.WriteString(">=<")
+			b.WriteString(o.describeArg(o.nonPointer.Elem(), o.f.Name+"-value"))
+			b.WriteRune('>')
+		} else {
+			b.WriteRune(' ')
+			b.WriteString(o.describeArg(o.nonPointer, o.f.Name))
+		}
 	case parameterOpt:
 		b.WriteRune('-')
 		if doubleDash {
@@ -395,46 +455,39 @@ func (h *FlagHandler) Usage() string {
 
 	switch len(optional[flagOpt]) {
 	case 0:
-	//
-	case 1, 2, 3, 4, 5:
-		usage = append(usage, h.formatOpts(optional[flagOpt])...)
 	default:
 		if h.combineShort {
-			usage = append(usage, "[-flags]")
+			usage = append(usage, "[-flags] ")
 		} else {
-			usage = append(usage, "[flags]")
+			usage = append(usage, "[flags] ")
 		}
 	}
 	usage = append(usage, h.formatOpts(required[flagOpt])...)
 
 	switch len(optional[optionOpt]) {
 	case 0:
-	case 1, 2, 3, 4:
-		usage = append(usage, h.formatOpts(optional[optionOpt])...)
 	default:
 		if h.combineShort {
-			usage = append(usage, "[-options option-args]")
+			usage = append(usage, "[-options option-args] ")
 		} else {
-			usage = append(usage, "[options]")
+			usage = append(usage, "[options] ")
 		}
 	}
 	usage = append(usage, h.formatOpts(required[optionOpt])...)
 
 	switch len(optional[parameterOpt]) {
 	case 0:
-	case 1, 2, 3, 4:
-		usage = append(usage, h.formatOpts(optional[parameterOpt])...)
 	default:
-		usage = append(usage, "[parameters]")
+		usage = append(usage, "[parameters] ")
 	}
 	usage = append(usage, h.formatOpts(required[parameterOpt])...)
 
 	switch len(h.subcommands) {
 	case 0:
 	case 1, 2, 3, 4, 5, 6, 7:
-		usage = append(usage, strings.Join(h.subcommandsOrder, "|"))
+		usage = append(usage, strings.Join(h.subcommandsOrder, "|")+" ")
 	default:
-		usage = append(usage, "subcommand")
+		usage = append(usage, "subcommand ")
 	}
 
 	if h.positionalHelp != "" {
@@ -448,6 +501,9 @@ func (h *FlagHandler) Usage() string {
 		for i := undefinedOpt; i < lastOpt; i++ {
 			for _, optSet := range [][]*opt{required[i], optional[i]} {
 				for _, opt := range optSet {
+					if !opt.primary {
+						continue
+					}
 					usage = append(usage, fmt.Sprintf(
 						"    %-30s %s\n",
 						opt.format(h.doubleDash),

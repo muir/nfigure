@@ -1,19 +1,20 @@
 package nfigure
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"strings"
 )
 
 type arguments struct {
-	User string `flag:"u user,required"`
-	Hosts []string `flag:"host h,split=&"`
+	User      string          `flag:"u user,required"`
+	Hosts     []string        `flag:"host h,split=&"`
 	Confusion map[int]float64 `flag:"confusion C"`
+	// 	OMap map[string]bool `flag:"oset,split=explode"`
 }
 
 func Example_usage() {
-	fh := PosixFlagHandler() 
+	fh := PosixFlagHandler()
 	os.Args = strings.Split("program --flag-not-defined", " ")
 	registry := NewRegistry(WithFiller("flag", fh))
 	var arguments arguments

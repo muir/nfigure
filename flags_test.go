@@ -219,7 +219,7 @@ func TestFlags(t *testing.T) {
 		t.Run(tc.cmd, func(t *testing.T) {
 			t.Log(tc.cmd)
 			var called int
-			os.Args = strings.Split(tc.cmd, " ")
+			os.Args = append([]string{"pgrm"}, strings.Split(tc.cmd, " ")...)
 			args := []FlaghandlerOptArg{
 				OnStart(func(args []string) {
 					if tc.sub == "" {

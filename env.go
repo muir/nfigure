@@ -9,31 +9,45 @@ import (
 )
 
 type LookupFiller struct {
-	lookup func(value string, tag string) (string, bool, error)
+	lookup    func(value string, tag string) (string, bool, error)
+	wrapError func(error) error
 }
 
-func NewEnvFiller() Filler {
-	return NewLookupFillerSimple(os.LookupEnv)
+type LookupFillerOpt func(*LookupFiller)
+
+func NewEnvFiller(opts ...LookupFillerOpt) Filler {
+	return NewLookupFillerSimple(os.LookupEnv,
+		append([]LookupFillerOpt{WrapLookupErrors(EnvironmentError)},
+			opts...)...)
 }
 
-func NewDefaultFiller() Filler {
+func NewDefaultFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFiller(func(_, tag string) (string, bool, error) {
 		return tag, true, nil
-	})
+	}, opts...)
 }
 
-func NewLookupFillerSimple(lookup func(string) (string, bool)) Filler {
-	return LookupFiller{
-		lookup: func(s string, _ string) (string, bool, error) {
-			got, ok := lookup(s)
-			return got, ok, nil
-		},
+func NewLookupFillerSimple(lookup func(string) (string, bool), opts ...LookupFillerOpt) Filler {
+	return NewLookupFiller(func(s string, _ string) (string, bool, error) {
+		got, ok := lookup(s)
+		return got, ok, nil
+	}, opts...)
+}
+
+func NewLookupFiller(lookup func(value string, tag string) (string, bool, error), opts ...LookupFillerOpt) Filler {
+	e := LookupFiller{
+		lookup:    lookup,
+		wrapError: func(e error) error { return e },
 	}
+	for _, f := range opts {
+		f(&e)
+	}
+	return e
 }
 
-func NewLookupFiller(lookup func(value string, tag string) (string, bool, error)) Filler {
-	return LookupFiller{
-		lookup: lookup,
+func WrapLookupErrors(f func(error) error) LookupFillerOpt {
+	return func(e *LookupFiller) {
+		e.wrapError = f
 	}
 }
 
@@ -55,14 +69,14 @@ func (e LookupFiller) Fill(
 	var tagData envTag
 	err := tag.Fill(&tagData)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", tag.Tag)
+		return false, ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
 	}
 	if tagData.Variable == "" {
 		return false, nil
 	}
 	value, ok, err := e.lookup(tagData.Variable, tag.Value)
 	if err != nil {
-		return false, errors.Wrapf(err, tag.Tag)
+		return false, ProgrammerError(errors.Wrapf(err, tag.Tag))
 	}
 	if !ok {
 		return false, nil
@@ -73,11 +87,11 @@ func (e LookupFiller) Fill(
 	}
 	setter, err := reflectutils.MakeStringSetter(t, ssa...)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", tag.Tag)
+		return false, ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
 	}
 	err = setter(v, value)
 	if err != nil {
-		return false, errors.Wrapf(err, "%s tag", tag.Tag)
+		return false, e.wrapError(errors.Wrapf(err, "%s tag", tag.Tag))
 	}
 	return true, nil
 }

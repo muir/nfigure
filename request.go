@@ -34,7 +34,8 @@ type Request struct {
 func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error {
 	v := reflect.ValueOf(model)
 	if !v.IsValid() || v.IsNil() || v.Type().Kind() != reflect.Ptr || v.Type().Elem().Kind() != reflect.Struct {
-		return errors.Errorf("First argument to Request must be a non-nil pointer to a struct, not %T", model)
+		return ProgrammerError(errors.Errorf(
+			"First argument to Request must be a non-nil pointer to a struct, not %T", model))
 	}
 	req := &Request{
 		registry: r,
