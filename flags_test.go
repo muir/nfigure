@@ -19,8 +19,8 @@ type flagSet1 struct {
 }
 
 type flagSet2 struct {
-	M map[string]int  `flag:"M"`
-	N *map[int]string `flag:"nm"`
+	M map[string]int  `flag:"M,map=prefix"`
+	N *map[int]string `flag:"nm",map=prefix`
 }
 
 type flagSet3 struct {

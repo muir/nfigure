@@ -103,30 +103,43 @@ type fhInheritable struct {
 }
 
 type flagTag struct {
-	Name      []string `pt:"0,split=space"`
-	Map       string   `pt:"map"`   // special value: prefix|explode
-	Split     string   `pt:"split"` // special value: explode, quote, space, comma, equal, equals, none
-	IsCounter bool     `pt:"counter"`
-	Required  bool     `pt:"required"` // flag must be used
-	ArgName   string   `pt:"argName"`  // name of the argument(s) for usage message
+	Name []string `pt:"0,split=space"`
+	flagTagComparable
+}
+
+type flagTagComparable struct {
+	Map       string `pt:"map"`   // special value: prefix|explode
+	Split     string `pt:"split"` // special value: explode, quote, space, comma, equal, equals, none
+	IsCounter bool   `pt:"counter"`
+	Required  bool   `pt:"required"` // flag must be used
+	ArgName   string `pt:"argName"`  // name of the argument(s) for usage message
 }
 
 type flagRef struct {
 	flagTag
+	flagRefComparable
 	// special	func(*FlagHandler) XXX
+	values    []string
+	used      []string
+	keys      []string
+	setters   map[setterKey]func(reflect.Value, string) error
+	fieldName string
+	tagValue  string
+	typ       reflect.Type
+}
+
+type flagRefComparable struct {
 	isBool  bool
 	isSlice bool
 	isMap   bool
 	explode int // for arrays only
-	setters map[setterKey]func(reflect.Value, string) error
-	values  []string
-	used    []string
-	keys    []string
 }
 
+// setterKey is used to cache setters.  Setters only depend upon the
+// type of the thing being filled and how it is split.
 type setterKey struct {
-	typ reflect.Type
-	tag string
+	typ   reflect.Type
+	split string
 }
 
 var _ Filler = &FlagHandler{}
@@ -404,7 +417,9 @@ func (h *FlagHandler) Usage() string {
 		tagSet := reflectutils.SplitTag(f.Tag).Set()
 		ref := flagRef{
 			flagTag: flagTag{
-				Split: ",",
+				flagTagComparable: flagTagComparable{
+					Split: ",",
+				},
 			},
 		}
 		_ = tagSet.Get(h.tagName).Fill(&ref) // should not error
