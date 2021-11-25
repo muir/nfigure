@@ -20,7 +20,7 @@ type flagSet1 struct {
 
 type flagSet2 struct {
 	M map[string]int  `flag:"M,map=prefix"`
-	N *map[int]string `flag:"nm",map=prefix`
+	N *map[int]string `flag:"nm,map=prefix"`
 }
 
 type flagSet3 struct {
@@ -32,6 +32,11 @@ type flagSet4 struct {
 	S  []string  `flag:"s,split=none"`
 	Ip []*int    `flag:"ip,split=comma"`
 	SA [2]string `flag:"sa,split=explode"`
+}
+
+type flagSet5 struct {
+	O map[complex128]int `flag:"O"`
+	P *map[string]bool   `flag:"P,map=explode,split=/"`
 }
 
 var cases = []struct {
@@ -203,6 +208,26 @@ var cases = []struct {
 		goFlags: true,
 		want: &flagSet4{
 			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+		},
+	},
+	{
+		base: &flagSet5{},
+		cmd:  "-P yes/true -P no/false",
+		want: &flagSet5{
+			P: &(map[string]bool{
+				"yes": true,
+				"no":  false,
+			}),
+		},
+	},
+	{
+		base: &flagSet5{},
+		cmd:  "-O 3+4i=7 -O 9.3-2i=-13",
+		want: &flagSet5{
+			O: map[complex128]int{
+				3 + 4i:   7,
+				9.3 - 2i: -13,
+			},
 		},
 	},
 }

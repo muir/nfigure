@@ -26,6 +26,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 		if err != nil {
 			return NFigureError(errors.Wrap(err, "unexpected internal error"))
 		}
+		fmt.Println("XXX parseflags mapRE = ", h.mapRE)
 	}
 
 	handleFollowingArgs := func(ref *flagRef, flag string, withDash string, inErr string) error {
@@ -45,8 +46,9 @@ func (h *FlagHandler) parseFlags(i int) error {
 			if len(kv) != 2 {
 				return UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
 			}
+			fmt.Println("XXX parse map split", kv[0], "=", kv[1])
 			ref.keys = append(ref.keys, kv[0])
-			ref.values = append(ref.keys, kv[1])
+			ref.values = append(ref.values, kv[1])
 			ref.used = append(ref.used, withDash)
 		default:
 			count := 1
@@ -274,12 +276,13 @@ func (h *FlagHandler) Fill(
 			es := setter
 			for i, value := range ref.values {
 				key := ref.keys[i]
+				fmt.Println("XXX flagfill map ", key, "=", value, nonPointerType.Key(), nonPointerType.Elem())
 				kp := reflect.New(t.Key())
 				err := ks(kp.Elem(), key)
 				if err != nil {
 					return false, UsageError(errors.Wrapf(err, "key for %s", ref.used[i]))
 				}
-				ep := reflect.New(t.Elem())
+				ep := reflect.New(nonPointerType.Elem())
 				err = es(ep.Elem(), value)
 				if err != nil {
 					return false, UsageError(errors.Wrapf(err, "value for %s", ref.used[i]))
@@ -353,7 +356,7 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 		ref.IsCounter = false
 		ref.Split = "="
 		ref.Map = "explode"
-		setterType = t.Elem()
+		setterType = nonPointerType.Elem()
 	}
 	err := tag.Fill(&ref)
 	return ref, setterType, nonPointerType, err
@@ -366,6 +369,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 	v := reflect.ValueOf(model)
 	var walkErr error
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
+		fmt.Println("XXX prewalk", f.Name, f.Type, f.Tag)
 		tag := reflectutils.SplitTag(f.Tag).Set().Get(tagName)
 		if tag.Tag == "" {
 			return true
@@ -410,6 +414,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				walkErr = ProgrammerError(errors.Errorf("map=%s not defined, map=explode|prefix", ref.Map))
 			}
 		}
+		fmt.Println("XXX PreWalk make setter", setterType, "was", f.Type)
 		setter, err := reflectutils.MakeStringSetter(setterType, reflectutils.WithSplitOn(ref.Split))
 		if err != nil {
 			walkErr = UsageError(errors.Wrap(err, f.Name))
