@@ -256,9 +256,26 @@ func OnStart(chain ...interface{}) FlaghandlerOptArg {
 	}
 }
 
+// PositionalHelp provides a help string for what to display in the usage
+// summary after the flags, and options.  For example: "file(s)"
 func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.positionalHelp = positionalHelp
+		return nil
+	}
+}
+
+// FlagHelpTag specifies the name of the tag to use for providing
+// per-flag help summaries.  For example, you may want:
+//
+//	type MyConfig struct {
+//		User string `flag:"u" help:"Email address"`
+//	}
+//
+// The default is "help"
+func FlagHelpTag(tagName string) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.helpTag = tagName
 		return nil
 	}
 }
@@ -298,7 +315,6 @@ type opt struct {
 	help       string
 	category   optCategory
 	f          reflect.StructField
-	isBool     bool
 	nonPointer reflect.Type
 	primary    bool
 	ref        flagRef
@@ -308,6 +324,7 @@ type opt struct {
 func (o opt) format(doubleDash bool) string {
 	var optional string
 	var b strings.Builder
+	b.WriteRune(' ')
 	if !o.ref.Required {
 		b.WriteRune('[')
 		optional = "]"
@@ -334,18 +351,25 @@ func (o opt) format(doubleDash bool) string {
 		if doubleDash {
 			b.WriteRune('-')
 		}
-		if o.isBool {
+		if o.ref.isBool {
 			b.WriteString("[no-]")
 		}
 		b.WriteString(o.name)
 		switch o.nonPointer.Kind() {
 		case reflect.Bool:
 		case reflect.Map:
-			b.WriteRune('<')
-			b.WriteString(o.describeArg(o.nonPointer.Key(), o.f.Name+"-key"))
-			b.WriteString(">=<")
-			b.WriteString(o.describeArg(o.nonPointer.Elem(), o.f.Name+"-value"))
-			b.WriteRune('>')
+			if o.ref.Map == "prefix" {
+				b.WriteRune('<')
+				b.WriteString(o.describeArg(o.nonPointer.Key(), "key"))
+				b.WriteString(">=<")
+				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value"))
+				b.WriteRune('>')
+			} else {
+				b.WriteRune(' ')
+				b.WriteString(o.describeArg(o.nonPointer.Key(), "key"))
+				b.WriteString(o.ref.Split)
+				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value"))
+			}
 		default:
 			if doubleDash {
 				b.WriteRune('=')
@@ -356,7 +380,6 @@ func (o opt) format(doubleDash bool) string {
 		}
 	}
 	b.WriteString(optional)
-	b.WriteRune(' ')
 	return b.String()
 }
 
@@ -375,7 +398,7 @@ func (o opt) describeArg(typ reflect.Type, name string) string {
 	case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return "uint"
 	case reflect.Float32, reflect.Float64:
-		return "x.y"
+		return "N.N"
 	case reflect.Complex64, reflect.Complex128:
 		return "X+Yi"
 	default:
@@ -415,27 +438,21 @@ func (h *FlagHandler) Usage() string {
 
 	for _, f := range h.rawData {
 		tagSet := reflectutils.SplitTag(f.Tag).Set()
-		ref := flagRef{
-			flagTag: flagTag{
-				flagTagComparable: flagTagComparable{
-					Split: ",",
-				},
-			},
+		ref, _, _, err := parseFlagRef(tagSet.Get(h.tagName), f.Type)
+		if err != nil {
+			panic(err.Error())
 		}
-		_ = tagSet.Get(h.tagName).Fill(&ref) // should not error
-		help := tagSet.Get(h.helpTag).Tag
+		help := tagSet.Get(h.helpTag).Value
 		if help == "" {
 			help = fmt.Sprintf("set %s (%s)", f.Name, f.Type)
 		}
 		nonPointer := reflectutils.NonPointer(f.Type)
-		isBool := nonPointer.Kind() == reflect.Bool
 		var lead *opt
 		for i, n := range ref.Name {
 			o := &opt{
 				name:       n,
 				help:       help,
 				f:          f,
-				isBool:     isBool,
 				primary:    i == 0,
 				ref:        ref,
 				nonPointer: nonPointer,
@@ -450,7 +467,7 @@ func (h *FlagHandler) Usage() string {
 			case 0:
 				continue
 			case 1:
-				if isBool {
+				if ref.isBool {
 					o.category = flagOpt
 				} else {
 					o.category = optionOpt
@@ -466,15 +483,15 @@ func (h *FlagHandler) Usage() string {
 		}
 	}
 	usage := make([]string, 0, len(h.rawData)*2+10+len(h.subcommands)*2)
-	usage = append(usage, "Usage: "+os.Args[0]+" ")
+	usage = append(usage, "Usage: "+os.Args[0])
 
 	switch len(optional[flagOpt]) {
 	case 0:
 	default:
 		if h.combineShort {
-			usage = append(usage, "[-flags] ")
+			usage = append(usage, " [-flags]")
 		} else {
-			usage = append(usage, "[flags] ")
+			usage = append(usage, " [flags]")
 		}
 	}
 	usage = append(usage, h.formatOpts(required[flagOpt])...)
@@ -483,9 +500,9 @@ func (h *FlagHandler) Usage() string {
 	case 0:
 	default:
 		if h.combineShort {
-			usage = append(usage, "[-options option-args] ")
+			usage = append(usage, " [-options args]")
 		} else {
-			usage = append(usage, "[options] ")
+			usage = append(usage, " [options]")
 		}
 	}
 	usage = append(usage, h.formatOpts(required[optionOpt])...)
@@ -493,7 +510,7 @@ func (h *FlagHandler) Usage() string {
 	switch len(optional[parameterOpt]) {
 	case 0:
 	default:
-		usage = append(usage, "[parameters] ")
+		usage = append(usage, " [parameters]")
 	}
 	usage = append(usage, h.formatOpts(required[parameterOpt])...)
 
@@ -502,13 +519,12 @@ func (h *FlagHandler) Usage() string {
 	case 1, 2, 3, 4, 5, 6, 7:
 		usage = append(usage, strings.Join(h.subcommandsOrder, "|")+" ")
 	default:
-		usage = append(usage, "subcommand ")
+		usage = append(usage, " subcommand")
 	}
 
 	if h.positionalHelp != "" {
-		usage = append(usage, h.positionalHelp)
+		usage = append(usage, " ", h.positionalHelp)
 	}
-
 	usage = append(usage, "\n")
 
 	if len(h.rawData) > 0 {
@@ -524,7 +540,7 @@ func (h *FlagHandler) Usage() string {
 						opt.format(h.doubleDash),
 						strings.Join(notEmpty(
 							opt.formatAlts(h.doubleDash),
-							opt.help,
+							prependSpace(opt.help),
 						), " ")))
 				}
 			}

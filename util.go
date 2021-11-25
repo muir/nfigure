@@ -1,5 +1,12 @@
 package nfigure
 
+func prependSpace(s string) string {
+	if s != "" {
+		return " " + s
+	}
+	return ""
+}
+
 func repeatString(s string, count int) []string {
 	r := make([]string, count)
 	for i := 0; i < count; i++ {

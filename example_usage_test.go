@@ -7,14 +7,14 @@ import (
 )
 
 type arguments struct {
-	User      string          `flag:"u user,required"`
+	User      string          `flag:"u user,required" help:"email address"`
 	Hosts     []string        `flag:"host h,split=&"`
-	Confusion map[int]float64 `flag:"confusion C"`
-	// 	OMap map[string]bool `flag:"oset,split=explode"`
+	Confusion map[int]float64 `flag:"confusion C,map=prefix"`
+	OMap      map[string]bool `flag:"oset,split=/"`
 }
 
 func Example_usage() {
-	fh := PosixFlagHandler()
+	fh := PosixFlagHandler(PositionalHelp("file(s)"))
 	os.Args = strings.Split("program --flag-not-defined", " ")
 	registry := NewRegistry(WithFiller("flag", fh))
 	var arguments arguments
