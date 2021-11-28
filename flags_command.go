@@ -322,6 +322,7 @@ type opt struct {
 }
 
 func (o opt) format(doubleDash bool) string {
+	fmt.Printf("XXX o.ref: %+v\n", o.ref)
 	var optional string
 	var b strings.Builder
 	b.WriteRune(' ')
@@ -338,13 +339,13 @@ func (o opt) format(doubleDash bool) string {
 		b.WriteString(o.name)
 		if o.nonPointer.Kind() == reflect.Map {
 			b.WriteRune('<')
-			b.WriteString(o.describeArg(o.nonPointer.Key(), o.f.Name+"-key"))
+			b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
 			b.WriteString(">=<")
-			b.WriteString(o.describeArg(o.nonPointer.Elem(), o.f.Name+"-value"))
+			b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
 			b.WriteRune('>')
 		} else {
 			b.WriteRune(' ')
-			b.WriteString(o.describeArg(o.nonPointer, o.f.Name))
+			b.WriteString(o.describeArg(o.nonPointer, o.f.Name, o.ref.ArgName))
 		}
 	case parameterOpt:
 		b.WriteRune('-')
@@ -360,15 +361,15 @@ func (o opt) format(doubleDash bool) string {
 		case reflect.Map:
 			if o.ref.Map == "prefix" {
 				b.WriteRune('<')
-				b.WriteString(o.describeArg(o.nonPointer.Key(), "key"))
+				b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
 				b.WriteString(">=<")
-				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value"))
+				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
 				b.WriteRune('>')
 			} else {
 				b.WriteRune(' ')
-				b.WriteString(o.describeArg(o.nonPointer.Key(), "key"))
+				b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
 				b.WriteString(o.ref.Split)
-				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value"))
+				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
 			}
 		default:
 			if doubleDash {
@@ -376,21 +377,29 @@ func (o opt) format(doubleDash bool) string {
 			} else {
 				b.WriteRune(' ')
 			}
-			b.WriteString(o.describeArg(o.nonPointer, o.f.Name))
+			b.WriteString(o.describeArg(o.nonPointer, o.f.Name, o.ref.ArgName))
 		}
 	}
 	b.WriteString(optional)
 	return b.String()
 }
 
-func (o opt) describeArg(typ reflect.Type, name string) string {
+func (o opt) describeArg(typ reflect.Type, name string, override string) string {
+	if override != "" {
+		fmt.Println("XXX argname", override)
+	}
 	switch typ.Kind() {
 	case reflect.Slice:
-		ed := o.describeArg(typ.Elem(), name)
+		ed := o.describeArg(typ.Elem(), name, override)
 		return ed + o.ref.Split + ed + "..."
 	case reflect.Array:
-		ed := o.describeArg(typ.Elem(), name)
+		ed := o.describeArg(typ.Elem(), name, override)
 		return strings.Join(repeatString(ed, typ.Len()), o.ref.Split)
+	}
+	if override != "" {
+		return override
+	}
+	switch typ.Kind() {
 	case reflect.Bool:
 		return "true|false"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
