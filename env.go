@@ -8,33 +8,73 @@ import (
 	"github.com/pkg/errors"
 )
 
+// LookupFiller is a variable provider that is based upon looking up strings
+// based on their name.  An example is filling data from environment variables.
 type LookupFiller struct {
 	lookup    func(value string, tag string) (string, bool, error)
 	wrapError func(error) error
 }
 
+// LookupFillerOpt are options for creating LookupFillers
 type LookupFillerOpt func(*LookupFiller)
 
+// NewEnvFiller creates a LookupFiller that looks up variables from the environment.
+// NewRegistry includes maps "env" to such a filler.
+//
+// The first word after the tag name is the name of the environment variable.  Also
+// supported is a "split" tag that can be used to specify how to split up a value when
+// filling an array or slice from a single string.  Special values for split are:
+// "none", "comma", "equals".
+//
+//	type MyStruct struct {
+//		WeightFactor float64  `env:"WEIGHT_FACTOR"`
+//		Groups       []string `env:"GROUPS,split=|"`
+//	}
+//
 func NewEnvFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFillerSimple(os.LookupEnv,
 		append([]LookupFillerOpt{WrapLookupErrors(EnvironmentError)},
 			opts...)...)
 }
 
+// NewDefaultFiller creates a LookupFiller that simpley fills in the value provided
+// into the variable.  Comma (",") is not allowed in the values because that is used
+// to introduce options common to LookupFiller.
+//
+// NewRegistry includes maps "default" to such a filler.  To use "dflt" instead,
+// add the following optional arguments to your NewRegistry invocation:
+//
+//	WithFiller("default", nil),
+//	WithFiller("dflt", NewDefaultFiller)
+//
+// To fill a slice, set a split value:
+//
+//	type MyStruct struct {
+//		Users []string `default:"root|nobody,split=|"`
+//	}
 func NewDefaultFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFiller(func(_, tag string) (string, bool, error) {
 		return tag, true, nil
 	}, opts...)
 }
 
-func NewLookupFillerSimple(lookup func(string) (string, bool), opts ...LookupFillerOpt) Filler {
+// NewLookupFillerSimple creates a LookupFiller from a function that
+// does a simple lookup like os.LookupEnv().
+func NewLookupFillerSimple(lookup func(string) (value string, ok bool), opts ...LookupFillerOpt) Filler {
 	return NewLookupFiller(func(s string, _ string) (string, bool, error) {
 		got, ok := lookup(s)
 		return got, ok, nil
 	}, opts...)
 }
 
-func NewLookupFiller(lookup func(value string, tag string) (string, bool, error), opts ...LookupFillerOpt) Filler {
+// NewLookupFiller creates a LookupFiller from a function that can return error
+// in addition to a value and an indicator if a value is returned.  An error return
+// will likely cause program termination so it should be used when there is something
+// blocking the ability to look up a value.
+func NewLookupFiller(
+	lookup func(key string, tag string) (value string, ok bool, err error),
+	opts ...LookupFillerOpt,
+) Filler {
 	e := LookupFiller{
 		lookup:    lookup,
 		wrapError: func(e error) error { return e },
@@ -45,6 +85,7 @@ func NewLookupFiller(lookup func(value string, tag string) (string, bool, error)
 	return e
 }
 
+// WrapLookupErrors applies a transformation to errors returned by LookupFillers.
 func WrapLookupErrors(f func(error) error) LookupFillerOpt {
 	return func(e *LookupFiller) {
 		e.wrapError = f
@@ -56,6 +97,7 @@ type envTag struct {
 	Split    string `pt:"split"`
 }
 
+// Fill is part of the Filler contract.  It is used by Registry.Configure.
 func (e LookupFiller) Fill(
 	t reflect.Type,
 	v reflect.Value,
@@ -96,6 +138,7 @@ func (e LookupFiller) Fill(
 	return true, nil
 }
 
+// Len is part of the Filler contract
 func (e LookupFiller) Len(
 	t reflect.Type,
 	tag reflectutils.Tag,
@@ -132,11 +175,8 @@ func lenThroughFill(
 	return v.Len(), true
 }
 
+// Keys is part of the Filler contract
 func (e LookupFiller) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
 	return nil, false
 }
 func (e LookupFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }
-func (e LookupFiller) AddConfigFile(string, []string) (Filler, error)                 { return e, nil }
-func (e LookupFiller) PreWalk(string, *Request, interface{}) error                    { return nil }
-func (e LookupFiller) PreConfigure(string, *Registry) error                           { return nil }
-func (s LookupFiller) ConfigureComplete() error                                       { return nil }

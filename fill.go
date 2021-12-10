@@ -10,7 +10,7 @@ import (
 	"go.octolab.org/pointer"
 )
 
-// Fillers are applied recursively to structures that need
+// Filler s are applied recursively to structures that need
 // to be filled.
 type Filler interface {
 	// Recurse is called during the filling process to indicate
@@ -29,20 +29,36 @@ type Filler interface {
 	// Map keys must come from Keys() or the struct as a whole.
 	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (filledAnything bool, err error)
 
-	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
-	// struct before any call to Fill()
-	PreWalk(tagName string, request *Request, model interface{}) error
-
-	ConfigureComplete() error
-
-	// PreConfigure is called by nfigure.Registry once just before configuration starts
-	PreConfigure(tagName string, request *Registry) error
-
 	// for filling maps
 	Keys(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) ([]string, bool)
 	// for filling arrays & slices
 	Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool)
-	// for source fillers.  nil,nil return means no change
+}
+
+type CanPreWalk interface {
+	Filler
+	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
+	// struct before any call to Fill()
+	PreWalk(tagName string, request *Request, model interface{}) error
+}
+
+type CanConfigureComplete interface {
+	Filler
+	// ConfigureComplete is called by Registry.Configure() when all configuration is complete.
+	// This is currently skipped for Fillers that are subcommand specific.
+	ConfigureComplete() error
+}
+
+type CanPreConfigure interface {
+	Filler
+	// PreConfigure is called by nfigure.Registry once just before configuration starts
+	PreConfigure(tagName string, request *Registry) error
+}
+
+type CanAddConfigFile interface {
+	Filler
+	// If the file type is not supported by this filler, then
+	// nflex.UnknownFileTypeError must be returned.
 	AddConfigFile(file string, keyPath []string) (Filler, error)
 }
 
@@ -51,7 +67,7 @@ type fillData struct {
 	name    string
 	tags    reflectutils.TagSet
 	meta    metaFields
-	fillers Fillers
+	fillers *fillerCollection
 }
 
 type metaFields struct {
@@ -61,63 +77,20 @@ type metaFields struct {
 	Desc    *bool  `pt:"desc"`            // descend if somewhat filled already?
 }
 
-type Fillers map[string]Filler
-
-func (f Fillers) Copy() Fillers {
-	n := make(Fillers)
-	for tag, filler := range f {
-		n[tag] = filler
-	}
-	return n
-}
-
-type fillPair struct {
-	Filler Filler
-	Tag    reflectutils.Tag
-	Backup string // because Tag.Tag may be empty
-}
-
-func (f Fillers) Pairs(tagSet reflectutils.TagSet, meta metaFields) []fillPair {
-	pairs := make([]fillPair, 0, len(f))
-	done := make(map[string]struct{})
-	p := func(tag reflectutils.Tag) {
-		if filler, ok := f[tag.Tag]; ok {
-			pairs = append(pairs, fillPair{
-				Filler: filler,
-				Tag:    tag,
-				Backup: tag.Tag,
-			})
-			done[tag.Tag] = struct{}{}
-		}
-	}
-	if pointer.ValueOfBool(meta.First) {
-		for _, tag := range tagSet.Tags {
-			p(tag)
-		}
-	} else {
-		for i := len(tagSet.Tags) - 1; i >= 0; i-- {
-			p(tagSet.Tags[i])
-		}
-	}
-	for tag, filler := range f {
-		if _, ok := done[tag]; ok {
-			continue
-		}
-		pairs = append(pairs, fillPair{
-			Filler: filler,
-			Backup: tag,
-		})
-	}
-	return pairs
-}
-
-func (f Fillers) Len(
+// Len is intersting because it returns a func that that returns fillers.  The idea is
+// that when you're filling an array or slice, you first need to know how big it is.  That's
+// the total size of all the various Fillers combined.  But to fill, it you need to pull
+// from one source and then another.  The func that is returned will provide one source
+// at a time.  This breaks the semantics of where the individual elements will come from
+// if there is a meta tag.  There isn't a good answer for this -- trying to honor the meta
+// tag would be really difficult.
+func (f *fillerCollection) Len(
 	t reflect.Type,
 	tagSet reflectutils.TagSet,
 	meta metaFields,
-) (int, func() (Fillers, error)) {
+) (int, func() (*fillerCollection, error)) {
 	var total int
-	pairs := f.Pairs(tagSet, meta)
+	pairs := f.pairs(tagSet, meta)
 	lengths := make([]int, len(pairs))
 	combine := pointer.ValueOfBool(meta.Combine)
 	first := pointer.ValueOfBool(meta.First)
@@ -134,7 +107,7 @@ func (f Fillers) Len(
 	}
 	var index int
 	var done int
-	return total, func() (Fillers, error) {
+	return total, func() (*fillerCollection, error) {
 		for lengths[index] == 0 {
 			index++
 		}
@@ -149,16 +122,19 @@ func (f Fillers) Len(
 			index++
 			done = 0
 		}
-		return Fillers{key: filler}, nil
+		return &fillerCollection{
+			m:     map[string]Filler{key: filler},
+			order: []string{key},
+		}, nil
 	}
 }
 
-func (f Fillers) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
+func (f *fillerCollection) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
 	var all []string
 	seen := make(map[string]struct{})
 	first := pointer.ValueOfBool(meta.First)
 	combine := pointer.ValueOfBool(meta.Combine)
-	for _, fp := range f.Pairs(tagSet, meta) {
+	for _, fp := range f.pairs(tagSet, meta) {
 		keys, ok := fp.Filler.Keys(t, fp.Tag, first, combine)
 		if !ok {
 			continue
@@ -242,18 +218,14 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	return anyFilled, nil
 }
 
-func (fillers Fillers) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (Fillers, error) {
+func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
 	fillers = fillers.Copy()
-	for tag, filler := range fillers {
+	for tag, filler := range fillers.m {
 		f, err := filler.Recurse(name, t, tagSet.Get(tag))
 		if err != nil {
 			return nil, errors.Wrap(err, tag)
 		}
-		if f == nil {
-			delete(fillers, tag)
-			continue
-		}
-		fillers[tag] = f
+		fillers.Add(tag, f)
 	}
 	return fillers, nil
 }
@@ -283,7 +255,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	var anyFilled bool
 	combine := pointer.ValueOfBool(x.meta.Combine)
 	first := pointer.ValueOfBool(x.meta.First)
-	for _, fp := range x.fillers.Pairs(x.tags, x.meta) {
+	for _, fp := range x.fillers.pairs(x.tags, x.meta) {
 		filled, err := fp.Filler.Fill(t, v, fp.Tag, first, combine)
 		fmt.Println("XXX FP filled", x.name, filled, fp.Tag, err)
 		if err != nil {

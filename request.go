@@ -40,9 +40,6 @@ func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error 
 	req := &Request{
 		registry: r,
 		object:   model,
-		registryConfig: registryConfig{
-			fillers: make(Fillers),
-		},
 	}
 	for _, f := range options {
 		f(&req.registryConfig)
@@ -75,23 +72,19 @@ func (r *Request) getValidator() (Validate, bool) {
 	return nil, false
 }
 
-func (r *Request) getFillers() Fillers {
+func (r *Request) getFillers() *fillerCollection {
 	r.registry.lock.Lock()
 	defer r.registry.lock.Unlock()
 	return r.getFillersLocked()
 }
 
-func (r *Request) getFillersLocked() Fillers {
-	if r.fillers == nil {
+func (r *Request) getFillersLocked() *fillerCollection {
+	if r.fillers.IsEmpty() {
 		return r.registry.fillers
 	}
 	fillers := r.registry.fillers.Copy()
-	for tag, filler := range r.fillers {
-		if filler == nil {
-			delete(fillers, tag)
-		} else {
-			fillers[tag] = filler
-		}
+	for _, tag := range r.fillers.Order() {
+		fillers.Add(tag, r.fillers.m[tag])
 	}
 	return fillers
 }

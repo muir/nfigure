@@ -1,6 +1,7 @@
 package nfigure
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/muir/nfigure/nflex"
@@ -16,6 +17,9 @@ type Validate interface {
 	StructPartial(s interface{}, fields ...string) error
 }
 
+// Registry is the overall configuration context that is shared among
+// sources of configuration (Filler interface) and consumers of
+// configuration (Requests).
 type Registry struct {
 	requests         []*Request
 	lock             sync.Mutex
@@ -28,22 +32,38 @@ type Registry struct {
 type registryConfig struct {
 	metaTag   string
 	validator Validate
-	fillers   Fillers
+	fillers   *fillerCollection
 	prefix    []string
 }
 
+// RegistryFuncArg is used to set Registry options.
 type RegistryFuncArg func(*registryConfig)
 
+// WithFiller provides a source of configuration to a Registry.
+//
+// The tag parameter specifies how to invoke that source of configuration.
+// For example, if you have a function to lookup information from KMS,
+// you might register it as the "secret" filler:
+//
+//	myStruct := struct {
+//		DbPassword string `secret:"dbpasswd"`
+//	}
+//
+//	registry := NewRegistry(WithFiller("secret", NewLookupFiller(myFunc)))
+//	registry.Request(myStruct)
+//
+// If the filler is nil, then any pre-existing filler for that tag
+// is removed.
 func WithFiller(tag string, filler Filler) RegistryFuncArg {
 	return func(r *registryConfig) {
-		if filler == nil {
-			delete(r.fillers, tag)
-		} else {
-			r.fillers[tag] = filler
-		}
+		r.fillers.Add(tag, filler)
 	}
 }
 
+// WithValidate registers a validation function to be used to check
+// configuration structs after the configuration is complete.  Errors
+// reported by the validation function will be wrapped with
+// ValidationError and returned by Registry.Configgure()
 func WithValidate(v Validate) RegistryFuncArg {
 	return func(r *registryConfig) {
 		r.validator = v
@@ -78,14 +98,18 @@ type file struct {
 	path []string
 }
 
+// NewRegistry creates a configuration context that is shared among
+// sources of configuration (Filler interface) and consumers of
+// configuration (Requests).  Eventually call Configure() on the
+// returned registry.
 func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
 		registryConfig: registryConfig{
-			fillers: Fillers{
-				"env":     NewEnvFiller(),
-				"source":  NewFileFiller(),
-				"default": NewDefaultFiller(),
-			},
+			metaTag: "nfigure",
+			fillers: (&fillerCollection{}).
+				Build("env", NewEnvFiller()).
+				Build("source", NewFileFiller()).
+				Build("default", NewDefaultFiller()),
 		},
 	}
 	for _, f := range options {
@@ -94,19 +118,40 @@ func NewRegistry(options ...RegistryFuncArg) *Registry {
 	return r
 }
 
+// ConfigFile adds a source of configuration to all Fillers that implement
+// CanAddConfigFile will be be offered the config file.  The first filler
 func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	for tag, filler := range r.fillers {
-		n, err := filler.AddConfigFile(path, prefix)
+	var rejected error
+	fmt.Printf("XXX fillers %+v\n", r.fillers)
+	for _, tag := range r.fillers.Order() {
+		fmt.Println("XXX read configfile?", tag)
+		filler := r.fillers.m[tag]
+		canAdd, ok := filler.(CanAddConfigFile)
+		if !ok {
+			fmt.Println("XXX can't add config file", tag)
+			continue
+		}
+		n, err := canAdd.AddConfigFile(path, prefix)
 		if err != nil {
+			if nflex.IsUnknownFileTypeError(err) {
+				rejected = err
+				continue
+			}
 			return errors.Wrap(err, tag)
 		}
-		if n != nil {
-			r.fillers[tag] = n
+		if n == nil {
+			// We do not remove tag from fillers
+			continue
 		}
+		r.fillers.Add(tag, n)
+		return nil
 	}
-	return nil
+	if rejected != nil {
+		return rejected
+	}
+	return errors.Errorf("Unable to read config from %s", path)
 }
 
 /* TODO
@@ -132,8 +177,13 @@ func (r *Registry) Configure() error {
 			return errors.Wrap(err, request.name)
 		}
 	}
-	for tag, filler := range r.fillers {
-		err := filler.PreConfigure(tag, r)
+	for _, tag := range r.fillers.Order() {
+		filler := r.fillers.m[tag]
+		canPreConfigure, ok := filler.(CanPreConfigure)
+		if !ok {
+			continue
+		}
+		err := canPreConfigure.PreConfigure(tag, r)
 		if err != nil {
 			return err
 		}
@@ -145,8 +195,13 @@ func (r *Registry) Configure() error {
 			return errors.Wrap(err, request.name)
 		}
 	}
-	for _, filler := range r.fillers {
-		err := filler.ConfigureComplete()
+	for _, tag := range r.fillers.Order() {
+		filler := r.fillers.m[tag]
+		canConfigureComplete, ok := filler.(CanConfigureComplete)
+		if !ok {
+			continue
+		}
+		err := canConfigureComplete.ConfigureComplete()
 		if err != nil {
 			return err
 		}
@@ -173,7 +228,12 @@ func (r *Registry) preWalk(request *Request) error {
 }
 
 func (r *Registry) preWalkLocked(request *Request) error {
-	for tag, filler := range request.getFillersLocked() {
+	fillers := request.getFillersLocked()
+	for _, tag := range fillers.Order() {
+		filler, ok := fillers.m[tag].(CanPreWalk)
+		if !ok {
+			continue
+		}
 		err := filler.PreWalk(tag, request, request.object)
 		if err != nil {
 			return errors.Wrap(err, tag)

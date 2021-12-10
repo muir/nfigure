@@ -89,6 +89,9 @@ type FlagHandler struct {
 	usageSummary       string
 	positionalHelp     string
 	selectedSubcommand string
+	helpText           *string // if not-nil, implies --help flag and help subcommmand
+	helpAlreadyAdded   bool
+	alreadyParsed      bool
 }
 
 type fhInheritable struct {
@@ -152,6 +155,19 @@ var _ Filler = &FlagHandler{}
 //
 //	tar -xvf f.tgz --numeric-owner --hole-detection=raw --ownermap ownerfile --no-overwrite-dir
 //
+// Long-form options require a double-dash (--flag).  Flag values can be set
+// two ways: "--flag=value" or "--flag value".
+//
+// Multiple short-flags (-a -b -c) can be combined (-abc).  Short flags that are
+// not booleans or counters have arguments that follow.  When combined they remain
+// in the same order.  The following are the same, assuming -a and -b are both
+// short form flags that take an argument:
+//
+//	-a x -b y
+//	-ab x y
+//
+// Booleans are set with "--flag" or unset with "--no-flag".
+//
 // Flags are found using struct tags.  See the comment FlagHandler for details
 func PosixFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 	h := &FlagHandler{
@@ -167,6 +183,13 @@ func PosixFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 	return h
 }
 
+// GoFlagHandler creates and configures a flaghandler that mirrors Go's native
+// "flag" package in behavior.  Long-form flags can have a single dash or double
+// dashes (-flag vs --flag).
+//
+// Assignment or positional args are both supported -flag=value and -flag value.
+//
+// Flags are found using struct tags.  See the comment FlagHandler for details
 func GoFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 	h := &FlagHandler{
 		fhInheritable: fhInheritable{
@@ -196,6 +219,7 @@ func (h *FlagHandler) opts(opts []FlaghandlerOptArg) error {
 	return nil
 }
 
+// PreConfigure is part of the Filler contract.  It is called by Registery.Configure
 func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
 	h.tagName = tagName
 	h.registry = registry
@@ -217,6 +241,7 @@ func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
 	return h.parseFlags(1) // 0 is the program name so we skip it
 }
 
+// ConfigureComplete is part of the Filler contract.  It is called by Registery.Configure
 func (h *FlagHandler) ConfigureComplete() error {
 	if h.selectedSubcommand != "" {
 		err := h.subcommands[h.selectedSubcommand].ConfigureComplete()
@@ -233,6 +258,7 @@ func (h *FlagHandler) ConfigureComplete() error {
 	return nil
 }
 
+// FlaghandlerOptArg are options for flaghandlers
 type FlaghandlerOptArg func(*FlagHandler) error
 
 // OnActivate is called before flags are parsed.  It's mostly for subcommands.  The
@@ -247,12 +273,27 @@ func OnActivate(chain ...interface{}) FlaghandlerOptArg {
 	}
 }
 
+// OnStart is called at the end of configuration.  It does not need to return until
+// the program terminates (assuming there are no other Fillers in use that take
+// action during ConfigureComplete and also assuming that there isn't an OnStart in
+// at the subommmand level also).
 func OnStart(chain ...interface{}) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		return nject.Sequence("default-error-responder",
 			nject.Provide("default-error", func() nject.TerminalError {
 				return nil
 			})).Append("on-start", chain...).Bind(&h.onStart, nil)
+	}
+}
+
+// WithHelpText adds to the usage output and establishes a "--help" flag and
+// also a "help" subcommand (if there are any other subcommands).  If there are
+// other subcommands it is recommended that with WithHelpText be used to set
+// help text for each one.
+func WithHelpText(helpText string) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.helpText = &helpText
+		return nil
 	}
 }
 
@@ -280,6 +321,41 @@ func FlagHelpTag(tagName string) FlaghandlerOptArg {
 	}
 }
 
+func (h *FlagHandler) addHelpFlagAndCommand() error {
+	if h.helpAlreadyAdded || h.helpText == nil {
+		return nil
+	}
+	h.helpAlreadyAdded = true
+	if _, ok := h.longFlags["help"]; ok {
+		return ProgrammerError(errors.New("cannot define a 'help' flag and use FlagHelpTag()"))
+	}
+	h.longFlags["help"] = &flagRef{
+		flagRefComparable: flagRefComparable{
+			isBool: true,
+		},
+		typ: reflect.TypeOf((*bool)(nil)).Elem(),
+	}
+	if len(h.subcommands) > 0 {
+		if _, ok := h.subcommands["help"]; ok {
+			return ProgrammerError(errors.New("cannot define a 'help' subcommand and use FlagHelpTag()"))
+		}
+		h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
+			func() {
+				h.Usage()
+				os.Exit(0)
+			}))
+	}
+	return nil
+}
+
+// AddSubcommand adds behavior around the non-flags found in the list of
+// arguments.  An argument matching the "command" argument string will
+// eventually trigger calling that subcommand.  After a subcommand, only
+// flags defined in the "configModel" argument will be recognized.
+// Use OnStart to invoke the subcommand.
+//
+// The "usageSummary" string is a one-line description of what the subcommand
+// does.
 func (h *FlagHandler) AddSubcommand(command string, usageSummary string, configModel interface{}, opts ...FlaghandlerOptArg) (*FlagHandler, error) {
 	if configModel != nil {
 		v := reflect.ValueOf(configModel)
@@ -297,6 +373,23 @@ func (h *FlagHandler) AddSubcommand(command string, usageSummary string, configM
 	h.subcommandsOrder = append(h.subcommandsOrder, command)
 	sub.init()
 	return sub, sub.opts(opts)
+}
+
+func (h *FlagHandler) clearParse() {
+	for _, fs := range []map[string]*flagRef{
+		h.longFlags,
+		h.shortFlags,
+		h.mapFlags,
+	} {
+		for _, ref := range fs {
+			ref.values = nil
+			ref.used = nil
+			ref.keys = nil
+		}
+	}
+	for _, sub := range h.subcommands {
+		sub.clearParse()
+	}
 }
 
 type optCategory int
@@ -434,6 +527,8 @@ func formatOpts(doubleDash bool, opts []*opt) []string {
 	return res
 }
 
+// Usage produces a usage summary.  It is not called automatically unless
+// WithHelpText is used in creation of the flag handler.
 func (h *FlagHandler) Usage() string {
 	// done := make(map[string]struct{})
 
@@ -565,6 +660,10 @@ func (h *FlagHandler) Usage() string {
 				subcmd,
 				sub.usageSummary))
 		}
+	}
+
+	if h.helpText != nil {
+		usage = append(usage, "\n\n", *h.helpText)
 	}
 
 	return strings.Join(usage, "")

@@ -271,8 +271,9 @@ func TestFlags(t *testing.T) {
 			require.NoError(t, registry.Request(tc.base), "request")
 			err := registry.Configure()
 			if tc.error != "" {
-				assert.NotNilf(t, err, "expected configure error %s", tc.error)
-				assert.Contains(t, err.Error(), tc.error, "configure error")
+				if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
+					assert.Contains(t, err.Error(), tc.error, "configure error")
+				}
 				return
 			}
 			require.NoError(t, err, "configure")

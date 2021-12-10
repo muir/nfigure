@@ -14,6 +14,14 @@ import (
 )
 
 func (h *FlagHandler) parseFlags(i int) error {
+	if h.alreadyParsed {
+		h.clearParse()
+	}
+	h.alreadyParsed = true
+	err := h.addHelpFlagAndCommand()
+	if err != nil {
+		return err
+	}
 	var remainder []string
 
 	if len(h.mapFlags) > 0 {
@@ -180,10 +188,16 @@ func (h *FlagHandler) parseFlags(i int) error {
 		remainder = os.Args[i:]
 		break
 	}
+	if h.helpText != nil && len(h.longFlags["help"].values) != 0 {
+		h.Usage()
+		os.Exit(0)
+	}
 	h.remainder = remainder
 	return nil
 }
 
+// Fill is part of the Filler interface and will be invoked by Registry.Configure().
+//
 // Fill may be called multiple times for the same field: if it's a
 // pointer, then fill will first be called for it as a pointer, and
 // then later it will be called for it as a regular value.  Generally,
@@ -362,6 +376,8 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 	return ref, setterType, nonPointerType, err
 }
 
+// PreWalk is part of the Filler contract and is invoked by Registry.Configure()
+//
 // PreWalk examines configuration blocks and figures out the flags that
 // are defined.  It's possible that more than one field in various config
 // blocks references the same flag name.
@@ -466,12 +482,10 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 	return walkErr
 }
 
-func (h *FlagHandler) AddConfigFile(file string, keyPath []string) (Filler, error) { return nil, nil }
 func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
 	return nil, false
 }
 func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false }
-
 func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	return h, nil
 }

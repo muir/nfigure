@@ -30,6 +30,8 @@ func NewFileFiller(opts ...FileFillerOpts) FileFiller {
 	return s
 }
 
+// AddConfigFile is invoked by Registry.ConfigFile to note an additional
+// file to fill.
 func (s FileFiller) AddConfigFile(path string, keyPath []string) (Filler, error) {
 	source, err := nflex.UnmarshalFile(path, s.umarshalOptions...)
 	if err != nil {
@@ -84,10 +86,6 @@ func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, first, combine bo
 	}
 	return keys, source.Exists()
 }
-
-func (s FileFiller) PreWalk(string, *Request, interface{}) error           { return nil }
-func (s FileFiller) PreConfigure(tagName string, registry *Registry) error { return nil }
-func (s FileFiller) ConfigureComplete() error                              { return nil }
 
 func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool) {
 	source := nflex.MultiSourceSetFirst(firstFirst).

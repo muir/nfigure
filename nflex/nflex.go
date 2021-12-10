@@ -68,10 +68,12 @@ func UnmarshalFile(file string, args ...UnmarshalFileArg) (Source, error) {
 		f(&opts)
 	}
 	ext := strings.ToLower(filepath.Ext(file))
-	if ext != "" { ext = ext[1:] }
+	if ext != "" {
+		ext = ext[1:]
+	}
 	uf, ok := unmarshallers[ext]
 	if !ok {
-		return nil, errors.Errorf("Could not determine unmarshaller for %s (%s)", file, ext)
+		return nil, UnknownFileTypeError(errors.Errorf("Could not determine unmarshaller for %s (%s)", file, ext))
 	}
 	byts, err := fs.ReadFile(opts.FS, file)
 	if err != nil {
@@ -92,3 +94,30 @@ type unrestrictedFS struct{}
 
 func (u unrestrictedFS) Open(name string) (fs.File, error)     { return os.Open(name) }
 func (u unrestrictedFS) Stat(name string) (fs.FileInfo, error) { return os.Stat(name) }
+
+type unknownFileTypeError struct {
+	cause error
+}
+
+// UnknownFileType annotates an error as being caused by not knowing the file type.
+func UnknownFileTypeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return unknownFileTypeError{
+		cause: errors.WithStack(err),
+	}
+}
+
+func (u unknownFileTypeError) Error() string { return u.cause.Error() }
+func (u unknownFileTypeError) Unwrap() error { return u.cause }
+func (u unknownFileTypeError) Cause() error  { return u.cause }
+func (u unknownFileTypeError) Is(err error) bool {
+	_, ok := err.(unknownFileTypeError)
+	return ok
+}
+
+func IsUnknownFileTypeError(err error) bool {
+	var u unknownFileTypeError
+	return errors.Is(err, u)
+}

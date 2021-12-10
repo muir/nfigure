@@ -1,4 +1,4 @@
-
+ConfigureReactive
 
 if you add a source in the middle of a struct, should it be able to fill
 fields later in the struct?
@@ -26,3 +26,5 @@ validation of flags causes usage error
 add test for --map k=v --map k=v --map k=v
 
 issue with file filler should be blamed on the config file
+
+narrow the Filler contract?
