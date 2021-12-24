@@ -34,7 +34,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 		if err != nil {
 			return NFigureError(errors.Wrap(err, "unexpected internal error"))
 		}
-		fmt.Println("XXX parseflags mapRE = ", h.mapRE)
+		debugf("parseflags mapRE = %s", h.mapRE)
 	}
 
 	handleFollowingArgs := func(ref *flagRef, flag string, withDash string, inErr string) error {
@@ -54,7 +54,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			if len(kv) != 2 {
 				return UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
 			}
-			fmt.Println("XXX parse map split", kv[0], "=", kv[1])
+			debugf("parse map split %s = %s", kv[0], kv[1])
 			ref.keys = append(ref.keys, kv[0])
 			ref.values = append(ref.values, kv[1])
 			ref.used = append(ref.used, withDash)
@@ -209,9 +209,9 @@ func (h *FlagHandler) Fill(
 	firstFirst bool,
 	combineObjects bool,
 ) (bool, error) {
-	fmt.Println("XXX fill", tag.Tag, tag.Value, t)
+	debugf("fill %s %s %s", tag.Tag, tag.Value, t)
 	if t.Kind() == reflect.Ptr {
-		fmt.Println("XXX fill skipping pointer")
+		debugf("fill skipping pointer")
 		return false, nil
 	}
 	if tag.Tag == "" {
@@ -225,7 +225,7 @@ func (h *FlagHandler) Fill(
 	isMap := nonPointerType.Kind() == reflect.Map
 	for _, n := range rawRef.Name {
 		var m *map[string]*flagRef
-		fmt.Println("XXX fill flag", tag.Tag, tag.Value, "map:", rawRef.Map)
+		debugf("fill flag %s %s map: %v", tag.Tag, tag.Value, rawRef.Map)
 		if isMap && rawRef.Map == "prefix" {
 			m = &h.mapFlags
 		} else {
@@ -246,7 +246,7 @@ func (h *FlagHandler) Fill(
 			found = true
 			continue
 		}
-		fmt.Println("XXX fill lookup", tag.Tag, tag.Value, t)
+		debugf("fill lookup %s %s %v", tag.Tag, tag.Value, t)
 		setter, ok := ref.setters[setterKey{
 			typ:   setterType,
 			split: ref.Split,
@@ -290,7 +290,7 @@ func (h *FlagHandler) Fill(
 			es := setter
 			for i, value := range ref.values {
 				key := ref.keys[i]
-				fmt.Println("XXX flagfill map ", key, "=", value, nonPointerType.Key(), nonPointerType.Elem())
+				debugf("flagfill map %s = %s %s %s", key, value, nonPointerType.Key(), nonPointerType.Elem())
 				kp := reflect.New(t.Key())
 				err := ks(kp.Elem(), key)
 				if err != nil {
@@ -385,7 +385,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 	v := reflect.ValueOf(model)
 	var walkErr error
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
-		fmt.Println("XXX prewalk", f.Name, f.Type, f.Tag)
+		debugf("prewalk %s %s %s", f.Name, f.Type, f.Tag)
 		tag := reflectutils.SplitTag(f.Tag).Set().Get(tagName)
 		if tag.Tag == "" {
 			return true
@@ -430,7 +430,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				walkErr = ProgrammerError(errors.Errorf("map=%s not defined, map=explode|prefix", ref.Map))
 			}
 		}
-		fmt.Println("XXX PreWalk make setter", setterType, "was", f.Type)
+		debugf("PreWalk make setter %s was %s", setterType, f.Type)
 		setter, err := reflectutils.MakeStringSetter(setterType, reflectutils.WithSplitOn(ref.Split))
 		if err != nil {
 			walkErr = UsageError(errors.Wrap(err, f.Name))
@@ -443,23 +443,23 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				continue
 			case 1:
 				m = &h.shortFlags
-				fmt.Println("XXX prewalk register shortflag")
+				debugf("prewalk register shortflag")
 			default:
 				m = &h.longFlags
-				fmt.Println("XXX prewalk register longflag")
+				debugf("prewalk register longflag")
 			}
 			if ref.isMap && ref.Map == "prefix" {
 				m = &h.mapFlags
-				fmt.Println("XXX prewalk nope, register mapflag")
+				debugf("prewalk nope, register mapflag")
 			}
-			fmt.Println("XXX prewalk registring", tag.Value, setterType, ref.Split)
+			debugf("prewalk registring %s %s %s", tag.Value, setterType, ref.Split)
 			sk := setterKey{
 				typ:   setterType,
 				split: ref.Split,
 			}
 			if existing, ok := (*m)[n]; ok {
 				// hmm, this flag is defined more than once!
-				fmt.Println("XXX prewalk existing flag regsitration")
+				debugf("prewalk existing flag regsitration")
 				if existing.flagTagComparable != ref.flagTagComparable || existing.flagRefComparable != ref.flagRefComparable {
 					walkErr = ProgrammerError(errors.Errorf("multiple registrations of %s:%s are not compatible with each other: %s/%s/%s vs %s/%s/%s",
 						tagName, n,
@@ -470,7 +470,7 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 				existing.isBool = existing.isBool && ref.isBool
 				existing.setters[sk] = setter
 			} else {
-				fmt.Println("XXX prewalk new flag regsitration")
+				debugf("prewalk new flag regsitration")
 				ref.setters = map[setterKey]func(reflect.Value, string) error{
 					sk: setter,
 				}

@@ -1,7 +1,6 @@
 package nfigure
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/muir/nfigure/nflex"
@@ -60,6 +59,12 @@ func WithFiller(tag string, filler Filler) RegistryFuncArg {
 	}
 }
 
+func WithoutFillers() RegistryFuncArg {
+	return func(r *registryConfig) {
+		r.fillers = newFillerCollection()
+	}
+}
+
 // WithValidate registers a validation function to be used to check
 // configuration structs after the configuration is complete.  Errors
 // reported by the validation function will be wrapped with
@@ -106,7 +111,7 @@ func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
 		registryConfig: registryConfig{
 			metaTag: "nfigure",
-			fillers: (&fillerCollection{}).
+			fillers: newFillerCollection().
 				Build("env", NewEnvFiller()).
 				Build("source", NewFileFiller()).
 				Build("default", NewDefaultFiller()),
@@ -124,13 +129,13 @@ func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	var rejected error
-	fmt.Printf("XXX fillers %+v\n", r.fillers)
+	debugf("fillers %+v", r.fillers)
 	for _, tag := range r.fillers.Order() {
-		fmt.Println("XXX read configfile?", tag)
+		debugf("read configfile? %s", tag)
 		filler := r.fillers.m[tag]
 		canAdd, ok := filler.(CanAddConfigFile)
 		if !ok {
-			fmt.Println("XXX can't add config file", tag)
+			debugf("can't add config file %s", tag)
 			continue
 		}
 		n, err := canAdd.AddConfigFile(path, prefix)

@@ -415,7 +415,7 @@ type opt struct {
 }
 
 func (o opt) format(doubleDash bool) string {
-	fmt.Printf("XXX o.ref: %+v\n", o.ref)
+	debugf("o.ref: %+v", o.ref)
 	var optional string
 	var b strings.Builder
 	b.WriteRune(' ')
@@ -479,7 +479,7 @@ func (o opt) format(doubleDash bool) string {
 
 func (o opt) describeArg(typ reflect.Type, name string, override string) string {
 	if override != "" {
-		fmt.Println("XXX argname", override)
+		debugf("argname %s", override)
 	}
 	switch typ.Kind() {
 	case reflect.Slice:

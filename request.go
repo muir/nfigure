@@ -40,6 +40,9 @@ func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error 
 	req := &Request{
 		registry: r,
 		object:   model,
+		registryConfig: registryConfig{
+			fillers: newFillerCollection(),
+		},
 	}
 	for _, f := range options {
 		f(&req.registryConfig)

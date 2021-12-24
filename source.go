@@ -37,6 +37,7 @@ func (s FileFiller) AddConfigFile(path string, keyPath []string) (Filler, error)
 	if err != nil {
 		return nil, err
 	}
+	debug("adding config file", path)
 	return FileFiller{
 		source:          nflex.CombineSources(s.source, source),
 		umarshalOptions: s.umarshalOptions,
@@ -49,6 +50,7 @@ type fileTag struct {
 
 func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	if s.source == nil {
+		debug("file filler recurse -> nil", name)
 		return nil, nil
 	}
 	if tag.Tag != "" {
@@ -68,8 +70,10 @@ func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (
 	}
 	source := s.source.Recurse(name)
 	if source == nil {
+		debug("file filler recurse -> source/nil", name)
 		return nil, nil
 	}
+	debug("file filler recurse using", name)
 	return FileFiller{
 		source:          nflex.NewMultiSource(source),
 		umarshalOptions: s.umarshalOptions,
@@ -105,6 +109,7 @@ func (s FileFiller) Fill(
 	firstFirst bool,
 	combineObjects bool,
 ) (bool, error) {
+	debug("source fill into", t, tag, "first", firstFirst, "combine", combineObjects)
 	source := nflex.MultiSourceSetFirst(firstFirst).
 		Combine(nflex.MultiSourceSetCombine(combineObjects)).
 		Apply(s.source)
@@ -112,6 +117,7 @@ func (s FileFiller) Fill(
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, err := source.GetInt()
 		if err != nil {
+			debug("could not fill int", err)
 			return false, ConfigurationError(err)
 		}
 		v.SetInt(i)

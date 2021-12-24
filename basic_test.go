@@ -21,6 +21,7 @@ func TestBasicFile(t *testing.T) {
 		J int `nf:"j"`
 	}
 	registry := NewRegistry(
+		WithoutFillers(),
 		WithFiller("nf", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 		WithMetaTag("nf"),
 		WithFiller("nfigure", nil))
