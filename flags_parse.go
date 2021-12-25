@@ -481,11 +481,3 @@ func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{
 	})
 	return walkErr
 }
-
-func (h *FlagHandler) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
-	return nil, false
-}
-func (h *FlagHandler) Len(reflect.Type, reflectutils.Tag, bool, bool) (int, bool) { return 0, false }
-func (h *FlagHandler) Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
-	return h, nil
-}

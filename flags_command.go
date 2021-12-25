@@ -94,6 +94,10 @@ type FlagHandler struct {
 	alreadyParsed      bool
 }
 
+var _ CanPreWalkFiller = &FlagHandler{}
+var _ CanConfigureCompleteFiller = &FlagHandler{}
+var _ CanPreConfigureFiller = &FlagHandler{}
+
 type fhInheritable struct {
 	tagName       string
 	registry      *Registry
@@ -121,7 +125,6 @@ type flagTagComparable struct {
 type flagRef struct {
 	flagTag
 	flagRefComparable
-	// special	func(*FlagHandler) XXX
 	values    []string
 	used      []string
 	keys      []string

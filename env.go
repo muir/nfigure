@@ -15,6 +15,8 @@ type LookupFiller struct {
 	wrapError func(error) error
 }
 
+var _ CanLenFiller = LookupFiller{}
+
 // LookupFillerOpt are options for creating LookupFillers
 type LookupFillerOpt func(*LookupFiller)
 
@@ -174,9 +176,3 @@ func lenThroughFill(
 	}
 	return v.Len(), true
 }
-
-// Keys is part of the Filler contract
-func (e LookupFiller) Keys(reflect.Type, reflectutils.Tag, bool, bool) ([]string, bool) {
-	return nil, false
-}
-func (e LookupFiller) Recurse(string, reflect.Type, reflectutils.Tag) (Filler, error) { return e, nil }

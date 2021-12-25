@@ -124,7 +124,7 @@ func NewRegistry(options ...RegistryFuncArg) *Registry {
 }
 
 // ConfigFile adds a source of configuration to all Fillers that implement
-// CanAddConfigFile will be be offered the config file.
+// CanAddConfigFileFiller will be be offered the config file.
 func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -134,7 +134,7 @@ func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	for _, tag := range r.fillers.Order() {
 		debugf("read configfile? %s", tag)
 		filler := r.fillers.m[tag]
-		canAdd, ok := filler.(CanAddConfigFile)
+		canAdd, ok := filler.(CanAddConfigFileFiller)
 		if !ok {
 			debugf("can't add config file %s", tag)
 			continue
@@ -188,7 +188,7 @@ func (r *Registry) Configure() error {
 	}
 	for _, tag := range r.fillers.Order() {
 		filler := r.fillers.m[tag]
-		canPreConfigure, ok := filler.(CanPreConfigure)
+		canPreConfigure, ok := filler.(CanPreConfigureFiller)
 		if !ok {
 			continue
 		}
@@ -206,7 +206,7 @@ func (r *Registry) Configure() error {
 	}
 	for _, tag := range r.fillers.Order() {
 		filler := r.fillers.m[tag]
-		canConfigureComplete, ok := filler.(CanConfigureComplete)
+		canConfigureComplete, ok := filler.(CanConfigureCompleteFiller)
 		if !ok {
 			continue
 		}
@@ -239,7 +239,7 @@ func (r *Registry) preWalk(request *Request) error {
 func (r *Registry) preWalkLocked(request *Request) error {
 	fillers := request.getFillersLocked()
 	for _, tag := range fillers.Order() {
-		filler, ok := fillers.m[tag].(CanPreWalk)
+		filler, ok := fillers.m[tag].(CanPreWalkFiller)
 		if !ok {
 			continue
 		}

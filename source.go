@@ -14,6 +14,11 @@ type FileFiller struct {
 	umarshalOptions []nflex.UnmarshalFileArg
 }
 
+var _ CanRecurseFiller = FileFiller{}
+var _ CanLenFiller = FileFiller{}
+var _ CanKeysFiller = FileFiller{}
+var _ CanAddConfigFileFiller = FileFiller{}
+
 type FileFillerOpts func(*FileFiller)
 
 func WithUnmarshalOpts(opts ...nflex.UnmarshalFileArg) FileFillerOpts {

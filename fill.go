@@ -12,6 +12,16 @@ import (
 // Filler s are applied recursively to structures that need
 // to be filled.
 type Filler interface {
+	// Fill is what's used to populate data in a configuration struct.
+	// Fillers can choose: they can fill structs, maps, arrays, slices,
+	// and pointers or they can wait for Recurse to be called and then
+	// Fill to be called on slice items and struct fields and map values.
+	// Map keys must come from Keys() or the struct as a whole.
+	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (filledAnything bool, err error)
+}
+
+type CanRecurseFiller interface {
+	Filler
 	// Recurse is called during the filling process to indicate
 	// that we are now filling a sub-struct, array element, map
 	// element etc.
@@ -20,41 +30,41 @@ type Filler interface {
 	// try to fill anything, it can return nil for it's replacment
 	// filler.
 	Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error)
+}
 
-	// Fill is what's used to populate data in a configuration struct.
-	// Fillers can choose: they can fill structs, maps, arrays, slices,
-	// and pointers or they can wait for Recurse to be called and then
-	// Fill to be called on slice items and struct fields and map values.
-	// Map keys must come from Keys() or the struct as a whole.
-	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (filledAnything bool, err error)
-
-	// for filling maps
-	Keys(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) ([]string, bool)
+type CanLenFiller interface {
+	Filler
 	// for filling arrays & slices
 	Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool)
 }
 
-type CanPreWalk interface {
+type CanKeysFiller interface {
+	Filler
+	// for filling maps
+	Keys(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) ([]string, bool)
+}
+
+type CanPreWalkFiller interface {
 	Filler
 	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
 	// struct before any call to Fill()
 	PreWalk(tagName string, request *Request, model interface{}) error
 }
 
-type CanConfigureComplete interface {
+type CanConfigureCompleteFiller interface {
 	Filler
 	// ConfigureComplete is called by Registry.Configure() when all configuration is complete.
 	// This is currently skipped for Fillers that are subcommand specific.
 	ConfigureComplete() error
 }
 
-type CanPreConfigure interface {
+type CanPreConfigureFiller interface {
 	Filler
 	// PreConfigure is called by nfigure.Registry once just before configuration starts
 	PreConfigure(tagName string, request *Registry) error
 }
 
-type CanAddConfigFile interface {
+type CanAddConfigFileFiller interface {
 	Filler
 	// If the file type is not supported by this filler, then
 	// nflex.UnknownFileTypeError must be returned.
@@ -94,7 +104,11 @@ func (f *fillerCollection) Len(
 	combine := pointer.ValueOfBool(meta.Combine)
 	first := pointer.ValueOfBool(meta.First)
 	for i, fp := range pairs {
-		length, ok := fp.Filler.Len(t, fp.Tag, first, combine)
+		canLen, ok := fp.Filler.(CanLenFiller)
+		if !ok {
+			continue
+		}
+		length, ok := canLen.Len(t, fp.Tag, first, combine)
 		if !ok {
 			continue
 		}
@@ -113,7 +127,7 @@ func (f *fillerCollection) Len(
 		tag := pairs[index].Tag
 		key := pairs[index].Backup
 		debug("fill: recurse single filler for len", tag, t)
-		filler, err := pairs[index].Filler.Recurse(strconv.Itoa(done), t, tag)
+		filler, err := recurseFiller(pairs[index].Filler, strconv.Itoa(done), t, tag)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +149,11 @@ func (f *fillerCollection) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta
 	first := pointer.ValueOfBool(meta.First)
 	combine := pointer.ValueOfBool(meta.Combine)
 	for _, fp := range f.pairs(tagSet, meta) {
-		keys, ok := fp.Filler.Keys(t, fp.Tag, first, combine)
+		canKey, ok := fp.Filler.(CanKeysFiller)
+		if !ok {
+			continue
+		}
+		keys, ok := canKey.Keys(t, fp.Tag, first, combine)
 		if !ok {
 			continue
 		}
@@ -226,7 +244,7 @@ func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet ref
 	fillers = fillers.Copy()
 	for tag, filler := range fillers.m {
 		debug("fill: Recurse", name, t, tag)
-		f, err := filler.Recurse(name, t, tagSet.Get(tag))
+		f, err := recurseFiller(filler, name, t, tagSet.Get(tag))
 		if err != nil {
 			return nil, errors.Wrap(err, tag)
 		}
@@ -389,4 +407,11 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	default:
 		return anyFilled, nil
 	}
+}
+
+func recurseFiller(filler Filler, structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
+	if canRecurse, ok := filler.(CanRecurseFiller); ok {
+		return canRecurse.Recurse(structName, t, tag)
+	}
+	return filler, nil
 }
