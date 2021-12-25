@@ -124,12 +124,13 @@ func NewRegistry(options ...RegistryFuncArg) *Registry {
 }
 
 // ConfigFile adds a source of configuration to all Fillers that implement
-// CanAddConfigFile will be be offered the config file.  The first filler
+// CanAddConfigFile will be be offered the config file.
 func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	var rejected error
 	debugf("fillers %+v", r.fillers)
+	var okay bool
 	for _, tag := range r.fillers.Order() {
 		debugf("read configfile? %s", tag)
 		filler := r.fillers.m[tag]
@@ -151,6 +152,9 @@ func (r *Registry) ConfigFile(path string, prefix ...string) error {
 			continue
 		}
 		r.fillers.Add(tag, n)
+		okay = true
+	}
+	if okay {
 		return nil
 	}
 	if rejected != nil {
