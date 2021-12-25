@@ -17,8 +17,8 @@ var content embed.FS
 
 func TestBasicFile(t *testing.T) {
 	var testData struct {
-		I int
-		J int `nf:"j"`
+		II int
+		JJ int `nf:"jj"`
 	}
 	registry := NewRegistry(
 		WithoutFillers(),
@@ -30,8 +30,8 @@ func TestBasicFile(t *testing.T) {
 	registry.Request(&testData)
 	err = registry.Configure()
 	require.NoError(t, err, "configure")
-	assert.Equal(t, 10, testData.I, "I")
-	assert.Equal(t, 12, testData.J, "J")
+	assert.Equal(t, 10, testData.II, "II")
+	assert.Equal(t, 12, testData.JJ, "JJ")
 }
 
 func TestBasicEnv(t *testing.T) {

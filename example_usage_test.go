@@ -26,8 +26,8 @@ func Example_usage() {
 	// Output: Usage: program [-options args] -u email [parameters] file(s)
 	//
 	// Options:
-	//     -u email                       email address
-	//     [--host=Hosts&Hosts...]        [-h Hosts&Hosts...]  set Hosts ([]string)
-	//     [--confusion<int>=<N.N>]       [-C<int>=<N.N>]  set Confusion (map[int]float64)
-	//     [--oset key/true|false]        set OMap (map[string]bool)
+	//      -u email                       email address
+	//      [--host=Hosts&Hosts...]        [-h Hosts&Hosts...]  set Hosts ([]string)
+	//      [--confusion<int>=<N.N>]       [-C<int>=<N.N>]  set Confusion (map[int]float64)
+	//      [--oset key/true|false]        set OMap (map[string]bool)
 }

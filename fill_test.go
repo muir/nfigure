@@ -12,29 +12,30 @@ import (
 )
 
 func TestMetaFirstScalar(t *testing.T) {
-	require.NoError(t, os.Setenv("G", "33"), "set G")
-	require.NoError(t, os.Setenv("H", "34"), "set H")
-	require.NoError(t, os.Setenv("I", "54"), "set I")
+	require.NoError(t, os.Setenv("GG", "33"), "set G")
+	require.NoError(t, os.Setenv("HH", "34"), "set H")
+	require.NoError(t, os.Setenv("II", "54"), "set I")
 	type testData struct {
-		G int `env:"G" flag:"G"        meta:",first"`
-		H int `env:"H" flag:"H"        meta:",last"`
-		I int `env:"I"          nf:"I" meta:",last"`
-		J int `                 nf:"j" meta:",first"`
+		GG int `env:"GG" flag:"GG"        meta:",first"`
+		HH int `env:"HH" flag:"HH"        meta:",last"`
+		II int `env:"II"          nf:"II" meta:",last"`
+		JJ int `                  nf:"jj" meta:",first"`
 	}
 	var got testData
 	want := testData{
-		G: 33, // from env (first)
-		H: 14, // from flags (last)
-		I: 30, // from source2 (last)
-		J: 12, // from source (first)
+		GG: 33, // from env (first)
+		HH: 14, // from flags (last)
+		II: 30, // from source2.yaml (last)
+		JJ: 12, // from source.yaml (first)
 	}
-	os.Args = strings.Split("pgrm -G 13 -H 14", " ")
+	os.Args = strings.Split("pgrm --GG 13 --HH 14", " ")
 	var called int
 	fh := PosixFlagHandler(OnStart(func(args []string) {
 		assert.Equal(t, ([]string)(nil), args, "remaining args")
 		called++
 	}))
 	registry := NewRegistry(
+		WithFiller("source", nil),
 		WithFiller("flag", fh),
 		WithFiller("nf", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 		WithMetaTag("meta"),

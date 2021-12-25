@@ -22,12 +22,12 @@ func (f fillerCollection) Copy() *fillerCollection {
 	}
 	f.Clean()
 	copy(n.order, f.order)
-	debug("copy fillers, order now", n.order, f)
+	debug("fillers: copy, order now", n.order, f)
 	return &n
 }
 
 func newFillerCollection() *fillerCollection {
-	debug("new fillers")
+	debug("fillers: new")
 	return &fillerCollection{
 		m: make(map[string]Filler),
 	}
@@ -42,7 +42,7 @@ func (f *fillerCollection) IsEmpty() bool {
 
 func (f *fillerCollection) Order() []string {
 	f.Clean()
-	debug("fillers order:", f.order)
+	debug("fillers: order:", f.order)
 	return f.order
 }
 
@@ -70,7 +70,7 @@ func (f *fillerCollection) Build(tag string, filler Filler) *fillerCollection {
 
 func (f *fillerCollection) Clean() {
 	if !f.dirty {
-		debug("fillers.Clean, not dirty")
+		debug("fillers: Clean, not dirty")
 		return
 	}
 	f.dirty = false
@@ -90,7 +90,7 @@ func (f *fillerCollection) Clean() {
 		f.order = n
 		break
 	}
-	debug("after fillers clean, order is", f.order)
+	debug("fillers: after clean, order is", f.order)
 }
 
 type fillPair struct {
@@ -100,18 +100,20 @@ type fillPair struct {
 }
 
 func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []fillPair {
-	debug("creating pairs", tagSet)
+	debug("fillers: creating pairs", tagSet, "order (for backup) is", f.Order())
 	pairs := make([]fillPair, 0, len(f.m))
 	done := make(map[string]struct{})
 	p := func(tag reflectutils.Tag) {
 		if filler, ok := f.m[tag.Tag]; ok {
-			debug("creating pairs, found filler for tag", tag.Tag)
+			debug("fillers: creating pairs, found filler for tag", tag.Tag)
 			pairs = append(pairs, fillPair{
 				Filler: filler,
 				Tag:    tag,
 				Backup: tag.Tag,
 			})
 			done[tag.Tag] = struct{}{}
+		} else {
+			debug("fillers, no filler (no pair) for", tag.Tag)
 		}
 	}
 	if pointer.ValueOfBool(meta.First) {
@@ -129,10 +131,10 @@ func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []
 		}
 		filler, ok := f.m[tag]
 		if !ok {
-			debug("creating pairs, could not find", tag)
+			debug("fillers: creating pairs, could not find", tag)
 			continue
 		}
-		debug("creating pairs, found backup", tag)
+		debug("fillers: creating pairs, found backup", tag)
 		pairs = append(pairs, fillPair{
 			Filler: filler,
 			Backup: tag,

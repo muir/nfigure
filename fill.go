@@ -112,6 +112,7 @@ func (f *fillerCollection) Len(
 		}
 		tag := pairs[index].Tag
 		key := pairs[index].Backup
+		debug("fill: recurse single filler for len", tag, t)
 		filler, err := pairs[index].Filler.Recurse(strconv.Itoa(done), t, tag)
 		if err != nil {
 			return nil, err
@@ -157,10 +158,10 @@ func (r *Request) fill() error {
 	if r.metaTag == "" {
 		r.metaTag = r.registry.metaTag
 	}
-	debug("fill:", t)
+	debug("fill: start fill", t)
 	fillers := r.getFillers()
 	for _, p := range r.getPrefix() {
-		debug("recurse", p)
+		debug("fill: recurse for prefix", p, "from", callers(3))
 		var err error
 		fillers, err = fillers.Recurse(p, reflect.TypeOf(struct{}{}), reflectutils.TagSet{})
 		if err != nil {
@@ -184,11 +185,11 @@ func (r *Request) fill() error {
 
 func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	var anyFilled bool
-	debug("filling struct", t)
+	debug("fill: struct", t)
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		tags := reflectutils.SplitTag(f.Tag).Set()
-		debug("fill field", f.Name, f.Type, f.Tag)
+		debug("fill: field", f.Name, f.Type, f.Tag)
 		meta := metaFields{
 			First:   pointer.ToBool(true),
 			Combine: pointer.ToBool(true),
@@ -203,7 +204,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 		if meta.Combine == nil {
 			meta.Combine = pointer.ToBool(true)
 		}
-		debugf("parse '%s'(%s), tag '%s' -> {name: %s, first:%v, combine:%v, desc:%v}\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta.Name, *meta.First, *meta.Combine, meta.Desc)
+		debugf("fill: parse '%s'(%s), tag '%s' -> {name: %s, first:%v, combine:%v, desc:%v}\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta.Name, *meta.First, *meta.Combine, meta.Desc)
 		filled, err := fillData{
 			r:       x.r,
 			name:    f.Name,
@@ -224,7 +225,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
 	fillers = fillers.Copy()
 	for tag, filler := range fillers.m {
-		debug("fillers recurse", name, t, tagSet)
+		debug("fill: Recurse", name, t, tag)
 		f, err := filler.Recurse(name, t, tagSet.Get(tag))
 		if err != nil {
 			return nil, errors.Wrap(err, tag)
@@ -235,7 +236,7 @@ func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet ref
 }
 
 func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
-	debug("fill field", x.name, x.meta.Name, t)
+	debug("fill: fillField", x.name, x.meta.Name, t)
 	switch x.meta.Name {
 	case "-":
 		return false, nil
@@ -243,10 +244,10 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		//
 	default:
 		x.name = x.meta.Name
-		debug("fillfield setting x.name, value is default", t, x.name)
+		debug("fill: fillField setting x.name, value is default", t, x.name)
 	}
 
-	debug("fill field recurse", x.name, t, x.tags)
+	debug("fill: fillField recurse", x.name, t, x.tags)
 	var err error
 	x.fillers, err = x.fillers.Recurse(x.name, t, x.tags)
 	if err != nil {
@@ -259,14 +260,13 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		isStructural = true
 	}
 
-	debug("pairs next")
-
 	var anyFilled bool
 	combine := pointer.ValueOfBool(x.meta.Combine)
 	first := pointer.ValueOfBool(x.meta.First)
+	debug("fill: pairs next,", x.name, "first:", first, "combine:", combine)
 	for _, fp := range x.fillers.pairs(x.tags, x.meta) {
 		filled, err := fp.Filler.Fill(t, v, fp.Tag, first, combine)
-		debugf("FP filled %s %v %s %s", x.name, filled, fp.Tag, err)
+		debugf("fill: pair filled %s %v %s %s", x.name, filled, fp.Tag, err)
 		if err != nil {
 			return false, errors.Wrapf(err, "flll %s using %s", x.name, fp.Tag.Tag)
 		}
@@ -289,7 +289,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		return anyFilled || filled, err
 	case reflect.Ptr:
 		e := reflect.New(t.Elem())
-		debugf("t is %s, e is %s", t, e.Elem().Type())
+		debugf("fill: t is %s, e is %s", t, e.Elem().Type())
 		filled, err := x.fillField(t.Elem(), e.Elem())
 		if err != nil {
 			return false, err
@@ -371,6 +371,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 				return false, errors.Wrap(err, "set key")
 			}
 			vp := reflect.New(elemType)
+			debug("fill: recurse for map key", key, "in", x.name)
 			x.fillers, err = fillers.Recurse(key, elemType, x.tags)
 			if err != nil {
 				return false, err
