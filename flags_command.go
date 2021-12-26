@@ -344,7 +344,7 @@ func (h *FlagHandler) addHelpFlagAndCommand() error {
 		}
 		h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
 			func() {
-				h.Usage()
+				fmt.Print(h.Usage())
 				os.Exit(0)
 			}))
 	}
@@ -666,7 +666,7 @@ func (h *FlagHandler) Usage() string {
 	}
 
 	if h.helpText != nil {
-		usage = append(usage, "\n\n", *h.helpText)
+		usage = append(usage, "\n", *h.helpText, "\n")
 	}
 
 	return strings.Join(usage, "")

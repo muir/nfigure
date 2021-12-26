@@ -189,7 +189,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 		break
 	}
 	if h.helpText != nil && len(h.longFlags["help"].values) != 0 {
-		h.Usage()
+		fmt.Print(h.Usage())
 		os.Exit(0)
 	}
 	h.remainder = remainder

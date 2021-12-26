@@ -1,7 +1,10 @@
 package nfigure
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -40,15 +43,18 @@ type flagSet5 struct {
 }
 
 var cases = []struct {
-	base        interface{}
-	cmd         string
-	want        interface{}
-	remaining   []string
-	error       string
-	goFlags     bool
-	subcommands map[string]interface{}
-	sub         string
-	wantSub     interface{}
+	base           interface{}
+	cmd            string
+	want           interface{}
+	remaining      []string
+	error          string
+	goFlags        bool
+	subcommands    map[string]interface{}
+	sub            string
+	wantSub        interface{}
+	capture        string // re-run in sub-process capturing output
+	additionalArgs []FlaghandlerOptArg
+	addHelp        bool
 }{
 	{
 		base: &flagSet1{},
@@ -230,6 +236,31 @@ var cases = []struct {
 			},
 		},
 	},
+	{
+		base: &flagSet5{},
+		cmd:  "--help",
+		additionalArgs: []FlaghandlerOptArg{
+			WithHelpText("this is additional help text"),
+			PositionalHelp("this is positional help"),
+			FlagHelpTag("helptag"),
+		},
+		addHelp: true,
+		want: &flagSet5{
+			O: map[complex128]int{
+				3 + 4i:   7,
+				9.3 - 2i: -13,
+			},
+		},
+		capture: deindent(`
+			Usage: PROGRAME-NAME [-options args] this is positional help
+			
+			Options:
+			     [-O<X+Yi>=<int>]               set O (map[complex128]int)
+			     [-P<key>=<true|false>]         set P (*map[string]bool)
+			
+			this is additional help text
+			`),
+	},
 }
 
 func pointerToPointerToPonterToFloat64(f float64) ***float64 {
@@ -239,12 +270,16 @@ func pointerToPointerToPonterToFloat64(f float64) ***float64 {
 	return ppp
 }
 
+var argv0 = os.Args[0]
+
+var usageRE = regexp.MustCompile(`\AUsage: \S+ `)
+
 func TestFlags(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.cmd, func(t *testing.T) {
 			t.Log(tc.cmd)
 			var called int
-			os.Args = append([]string{"pgrm"}, strings.Split(tc.cmd, " ")...)
+			os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
 			args := []FlaghandlerOptArg{
 				OnStart(func(args []string) {
 					if tc.sub == "" {
@@ -255,6 +290,7 @@ func TestFlags(t *testing.T) {
 					called++
 				}),
 			}
+			args = append(args, tc.additionalArgs...)
 			fh := PosixFlagHandler(args...)
 			subcalled := make(map[string]int)
 			for sub, model := range tc.subcommands {
@@ -267,12 +303,39 @@ func TestFlags(t *testing.T) {
 			if tc.goFlags {
 				fh = GoFlagHandler(args...)
 			}
+			if tc.addHelp {
+				require.NoError(t, fh.addHelpFlagAndCommand(), "addHelpFlag")
+			}
 			registry := NewRegistry(WithFiller("flag", fh))
 			require.NoError(t, registry.Request(tc.base), "request")
+			if tc.capture != "" {
+				if os.Getenv("DOING_CAPTURE") == "yeah" {
+					fmt.Println("about to configure...")
+					err := registry.Configure()
+					fmt.Println("Did not exit, error is", err)
+					os.Exit(0)
+				}
+				cmd := exec.Command(argv0, "-test.run="+t.Name())
+				cmd.Env = append(os.Environ(), "DOING_CAPTURE=yeah")
+				out, err := cmd.Output()
+				if err != nil {
+					e, ok := err.(*exec.ExitError)
+					require.Truef(t, ok, "error type: %T %+v", err, err)
+					assert.True(t, e.Success(), "program exited 0")
+				}
+				got := string(out)
+				if assert.True(t, strings.HasPrefix(got, "about to configure...\n")) {
+					got = got[len("about to configure...\n"):]
+				}
+				got = usageRE.ReplaceAllLiteralString(got, "Usage: PROGRAME-NAME ")
+				assert.Equal(t, tc.capture, got, "command output")
+				return
+			}
 			err := registry.Configure()
 			if tc.error != "" {
 				if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
 					assert.Contains(t, err.Error(), tc.error, "configure error")
+					assert.True(t, IsUsageError(err), "is usage error")
 				}
 				return
 			}
@@ -286,4 +349,18 @@ func TestFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+var deindentRE = regexp.MustCompile(`\A(\s+)(?:\S|\n)`)
+
+func deindent(s string) string {
+	if strings.HasPrefix(s, "\n") {
+		s = s[1:]
+	}
+	m := deindentRE.FindStringSubmatch(s)
+	if len(m) == 0 {
+		return s
+	}
+	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(m[1]))
+	return re.ReplaceAllLiteralString(s, "")
 }
