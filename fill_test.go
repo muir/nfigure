@@ -20,6 +20,12 @@ func TestMetaFirstScalar(t *testing.T) {
 		HH int `env:"HH" flag:"HH"        meta:",last"`
 		II int `env:"II"          nf:"II" meta:",last"`
 		JJ int `                  nf:"jj" meta:",first"`
+		MM struct {
+			OO string
+		}
+		NNx struct {
+			PP string
+		} `nf:"NN"`
 	}
 	var got testData
 	want := testData{
@@ -27,6 +33,12 @@ func TestMetaFirstScalar(t *testing.T) {
 		HH: 14, // from flags (last)
 		II: 30, // from source2.yaml (last)
 		JJ: 12, // from source.yaml (first)
+		MM: struct{ OO string }{
+			OO: "source.yaml",
+		},
+		NNx: struct{ PP string }{
+			PP: "s.y",
+		},
 	}
 	os.Args = strings.Split("pgrm --GG 13 --HH 14", " ")
 	var called int
@@ -46,6 +58,7 @@ func TestMetaFirstScalar(t *testing.T) {
 	registry.Request(&got)
 	err = registry.Configure()
 	require.NoError(t, err, "configure")
+	t.Logf("got %+v", got)
 	assert.Equal(t, want, got, "config results")
 	assert.Equal(t, 1, called, "called")
 }

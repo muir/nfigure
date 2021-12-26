@@ -27,13 +27,8 @@ add test for --map k=v --map k=v --map k=v
 
 issue with file filler should be blamed on the config file
 
-narrow the Filler contract?
-
 stop matching name<>ENV unless expicitly requested
 
 test where names do not match
 
-test filling inline structs
-
-best practices for libary writers
 

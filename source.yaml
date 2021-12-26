@@ -3,3 +3,7 @@
   jj: 12
   KK: [a, b]
   LL: [m, n]
+  MM:
+    OO: source.yaml
+  NN:
+    PP: s.y
