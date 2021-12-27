@@ -11,6 +11,7 @@ import (
 	"github.com/muir/nject/nject"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
+	"go.octolab.org/pointer"
 )
 
 // General calling order....
@@ -85,7 +86,7 @@ type FlagHandler struct {
 	onActivate         func(*Registry, *FlagHandler) error
 	onStart            func(*Registry, *FlagHandler, []string) error
 	delayedErr         error
-	configModel        interface{}
+	configModel        interface{} // for subcommands
 	usageSummary       string
 	positionalHelp     string
 	selectedSubcommand string
@@ -224,6 +225,7 @@ func (h *FlagHandler) opts(opts []FlaghandlerOptArg) error {
 
 // PreConfigure is part of the Filler contract.  It is called by Registery.Configure
 func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
+	debug("flags: PreConfigure")
 	h.tagName = tagName
 	h.registry = registry
 	if h.delayedErr != nil {
@@ -246,6 +248,7 @@ func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
 
 // ConfigureComplete is part of the Filler contract.  It is called by Registery.Configure
 func (h *FlagHandler) ConfigureComplete() error {
+	debug("flags: ConfigureComplete")
 	if h.selectedSubcommand != "" {
 		err := h.subcommands[h.selectedSubcommand].ConfigureComplete()
 		if err != nil {
@@ -291,7 +294,7 @@ func OnStart(chain ...interface{}) FlaghandlerOptArg {
 
 // WithHelpText adds to the usage output and establishes a "--help" flag and
 // also a "help" subcommand (if there are any other subcommands).  If there are
-// other subcommands it is recommended that with WithHelpText be used to set
+// other subcommands, it is recommended that with WithHelpText be used to set
 // help text for each one.
 func WithHelpText(helpText string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
@@ -317,14 +320,14 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 //	}
 //
 // The default is "help"
-func FlagHelpTag(tagName string) FlaghandlerOptArg {
+func FlagHelpTag(helpTagName string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
-		h.helpTag = tagName
+		h.helpTag = helpTagName
 		return nil
 	}
 }
 
-func (h *FlagHandler) addHelpFlagAndCommand() error {
+func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 	if h.helpAlreadyAdded || h.helpText == nil {
 		return nil
 	}
@@ -342,6 +345,18 @@ func (h *FlagHandler) addHelpFlagAndCommand() error {
 		if _, ok := h.subcommands["help"]; ok {
 			return ProgrammerError(errors.New("cannot define a 'help' subcommand and use FlagHelpTag()"))
 		}
+		for key, sub := range h.subcommands {
+			if sub.helpText == nil {
+				sub.helpText = pointer.ToString("")
+			}
+			debug("adding help to sub", key)
+			err := sub.addHelpFlagAndCommand(true)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if forceSub || len(h.subcommands) > 0 {
 		h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
 			func() {
 				fmt.Print(h.Usage())
@@ -621,10 +636,14 @@ func (h *FlagHandler) Usage() string {
 	}
 	usage = append(usage, h.formatOpts(required[parameterOpt])...)
 
-	switch len(h.subcommands) {
+	switch len(h.subcommandsOrder) {
 	case 0:
-	case 1, 2, 3, 4, 5, 6, 7:
-		usage = append(usage, strings.Join(h.subcommandsOrder, "|")+" ")
+	case 1:
+		if !h.helpAlreadyAdded || h.subcommandsOrder[0] != "help" {
+			usage = append(usage, " "+strings.Join(h.subcommandsOrder, "|")+" ")
+		}
+	case 2, 3, 4, 5, 6, 7:
+		usage = append(usage, " "+strings.Join(h.subcommandsOrder, "|")+" ")
 	default:
 		usage = append(usage, " subcommand")
 	}
@@ -665,7 +684,7 @@ func (h *FlagHandler) Usage() string {
 		}
 	}
 
-	if h.helpText != nil {
+	if h.helpText != nil && *h.helpText != "" {
 		usage = append(usage, "\n", *h.helpText, "\n")
 	}
 

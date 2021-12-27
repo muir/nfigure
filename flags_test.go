@@ -54,7 +54,6 @@ var cases = []struct {
 	wantSub        interface{}
 	capture        string // re-run in sub-process capturing output
 	additionalArgs []FlaghandlerOptArg
-	addHelp        bool
 }{
 	{
 		base: &flagSet1{},
@@ -244,7 +243,6 @@ var cases = []struct {
 			PositionalHelp("this is positional help"),
 			FlagHelpTag("helptag"),
 		},
-		addHelp: true,
 		want: &flagSet5{
 			O: map[complex128]int{
 				3 + 4i:   7,
@@ -259,6 +257,37 @@ var cases = []struct {
 			     [-P<key>=<true|false>]         set P (*map[string]bool)
 			
 			this is additional help text
+			`),
+	},
+	{
+		base: &flagSet3{},
+		cmd:  "-p 20 foo help",
+		additionalArgs: []FlaghandlerOptArg{
+			WithHelpText("this is additional help text"),
+		},
+		want: &flagSet3{
+			P: pointer.ToInt32(20),
+		},
+		subcommands: map[string]interface{}{
+			"foo": &flagSet1{},
+		},
+		sub: "foo",
+		wantSub: &flagSet1{
+			I: 11,
+		},
+		remaining: []string{"xy"},
+		capture: deindent(`
+			Usage: PROGRAME-NAME [-options args] [parameters]
+
+			Options:
+			     [--iflag=int]                  [-i int]  set I (int)
+			     [--counter=int]                [-c int]  set C (int)
+			     [--ncounter=int]               set NC (int)
+			     [--sa1=SA1commaSA1]            set SA1 ([2]string)
+			     [--sa2=SA2,SA2]                set SA2 ([2]string)
+
+			Subcommands:
+			    help                 provide this usage info
 			`),
 	},
 }
@@ -303,9 +332,6 @@ func TestFlags(t *testing.T) {
 			if tc.goFlags {
 				fh = GoFlagHandler(args...)
 			}
-			if tc.addHelp {
-				require.NoError(t, fh.addHelpFlagAndCommand(), "addHelpFlag")
-			}
 			registry := NewRegistry(WithFiller("flag", fh))
 			require.NoError(t, registry.Request(tc.base), "request")
 			if tc.capture != "" {
@@ -326,6 +352,7 @@ func TestFlags(t *testing.T) {
 				got := string(out)
 				if assert.True(t, strings.HasPrefix(got, "about to configure...\n")) {
 					got = got[len("about to configure...\n"):]
+					t.Log("got header")
 				}
 				got = usageRE.ReplaceAllLiteralString(got, "Usage: PROGRAME-NAME ")
 				assert.Equal(t, tc.capture, got, "command output")

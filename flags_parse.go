@@ -14,11 +14,12 @@ import (
 )
 
 func (h *FlagHandler) parseFlags(i int) error {
+	debug("flags: begininng parse")
 	if h.alreadyParsed {
 		h.clearParse()
 	}
 	h.alreadyParsed = true
-	err := h.addHelpFlagAndCommand()
+	err := h.addHelpFlagAndCommand(false)
 	if err != nil {
 		return err
 	}
@@ -169,6 +170,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			continue
 		}
 		if sub, ok := h.subcommands[f]; ok {
+			debug("flags: selecting subcommand", f)
 			if sub.configModel != nil {
 				err := h.registry.Request(sub.configModel,
 					WithFiller(h.tagName, sub))
@@ -176,13 +178,15 @@ func (h *FlagHandler) parseFlags(i int) error {
 					return err
 				}
 			}
+			h.selectedSubcommand = f
+			sub.tagName = h.tagName   // set late (by PreConfigure) so must be propagated
+			sub.registry = h.registry // set late (by PreConfigure) so must be propagated
 			if sub.onActivate != nil {
 				err := sub.onActivate(h.registry, sub)
 				if err != nil {
 					return err
 				}
 			}
-			h.selectedSubcommand = f
 			return sub.parseFlags(i + 1)
 		}
 		remainder = os.Args[i:]

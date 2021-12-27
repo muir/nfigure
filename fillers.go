@@ -27,7 +27,7 @@ func (f fillerCollection) Copy() *fillerCollection {
 }
 
 func newFillerCollection() *fillerCollection {
-	debug("fillers: new")
+	debug("fillers: new", callers(3))
 	return &fillerCollection{
 		m: make(map[string]Filler),
 	}
