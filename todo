@@ -17,11 +17,7 @@ validate tests
 
 validation of flags causes usage error
 
-add test for --map k=v --map k=v --map k=v
-
 issue with file filler should be blamed on the config file
-
-stop matching name<>ENV unless expicitly requested
 
 test where names do not match
 
@@ -31,8 +27,8 @@ test double-level nested structs
 
 best practices for library writers
 
-export to "flags"
-
 provide a way to map from types to handlers and support time.Duration with it
 
 move error types to their own package (except NfigureError)
+
+rewrites and loops as layer over nflex

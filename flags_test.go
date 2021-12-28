@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mohae/deepcopy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.octolab.org/pointer"
@@ -26,6 +27,10 @@ type flagSet1 struct {
 type flagSet2 struct {
 	M map[string]int  `flag:"M,map=prefix"`
 	N *map[int]string `flag:"nm,map=prefix"`
+}
+
+type flagSet2a struct {
+	N *map[int]string `flag:"nm"`
 }
 
 type flagSet3 struct {
@@ -60,7 +65,10 @@ type importString struct {
 var cases = []struct {
 	base           interface{}
 	cmd            string
+	exportCmd      string
 	want           interface{}
+	wantExport     interface{}
+	exportToo      bool
 	remaining      []string
 	error          string
 	goFlags        bool
@@ -78,6 +86,7 @@ var cases = []struct {
 		want: &flagSet1{
 			I: 3,
 		},
+		exportCmd: "-iflag 3",
 	},
 	{
 		base: &flagSet1{},
@@ -126,6 +135,7 @@ var cases = []struct {
 		want: &flagSet1{
 			SA1: [2]string{"foo", "bar"},
 		},
+		exportToo: true,
 	},
 	{
 		base: &flagSet1{},
@@ -133,6 +143,7 @@ var cases = []struct {
 		want: &flagSet1{
 			SA1: [2]string{"foo", "bar"},
 		},
+		exportToo: true,
 	},
 	{
 		base: &flagSet1{},
@@ -155,6 +166,17 @@ var cases = []struct {
 		base: &flagSet2{},
 		cmd:  "--nm2=xyz --nm-30=ten",
 		want: &flagSet2{
+			N: &(map[int]string{
+				2:   "xyz",
+				-30: "ten",
+			}),
+		},
+		exportCmd: "-nm 2=xyz -nm -30=ten",
+	},
+	{
+		base: &flagSet2a{},
+		cmd:  "--nm 2=xyz --nm -30=ten",
+		want: &flagSet2a{
 			N: &(map[int]string{
 				2:   "xyz",
 				-30: "ten",
@@ -191,18 +213,20 @@ var cases = []struct {
 		remaining: []string{"xy"},
 	},
 	{
-		base:    &flagSet4{},
-		cmd:     "-sa foo bar baz",
-		goFlags: true,
+		base:      &flagSet4{},
+		cmd:       "-sa foo bar baz",
+		exportCmd: "-sa foo -sa bar",
+		goFlags:   true,
 		want: &flagSet4{
 			SA: [2]string{"foo", "bar"},
 		},
 		remaining: []string{"baz"},
 	},
 	{
-		base:    &flagSet4{},
-		cmd:     "-s x,x -s y -s z z",
-		goFlags: true,
+		base:      &flagSet4{},
+		cmd:       "-s x,x -s y -s z z",
+		exportToo: true,
+		goFlags:   true,
 		want: &flagSet4{
 			S: []string{"x,x", "y", "z"},
 		},
@@ -300,7 +324,7 @@ var cases = []struct {
 			     [--iflag=int]                  [-i int]  set I (int)
 			     [--counter=int]                [-c int]  set C (int)
 			     [--ncounter=int]               set NC (int)
-			     [--sa1=SA1commaSA1]            set SA1 ([2]string)
+			     [--sa1=SA1,SA1]                set SA1 ([2]string)
 			     [--sa2=SA2,SA2]                set SA2 ([2]string)
 
 			Subcommands:
@@ -441,7 +465,8 @@ func TestFlags(t *testing.T) {
 				fh = GoFlagHandler(args...)
 			}
 			registry := NewRegistry(WithFiller("flag", fh))
-			require.NoError(t, registry.Request(tc.base), "request")
+			baseCopy := deepcopy.Copy(tc.base)
+			require.NoError(t, registry.Request(baseCopy), "request")
 			if tc.capture != "" {
 				if os.Getenv("DOING_CAPTURE") == "yeah" {
 					fmt.Println("about to configure...")
@@ -466,27 +491,44 @@ func TestFlags(t *testing.T) {
 				assert.Equal(t, tc.capture, got, "command output")
 				return
 			}
-			err := registry.Configure()
-			if tc.error != "" {
-				if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
-					assert.Contains(t, err.Error(), tc.error, "configure error")
-					assert.True(t, IsUsageError(err), "is usage error")
+			if tc.want != nil {
+				err := registry.Configure()
+				if tc.error != "" {
+					if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
+						assert.Contains(t, err.Error(), tc.error, "configure error")
+						assert.True(t, IsUsageError(err), "is usage error")
+					}
+					return
 				}
-				return
+				require.NoError(t, err, "configure")
+				assert.Equal(t, tc.want, baseCopy, "data")
+				assert.Equal(t, 1, called, "onstart call count")
+				if tc.sub == "" {
+					assert.Equal(t, map[string]int{}, subcalled, "sub called")
+				} else {
+					assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
+				}
+				for i, spec := range tc.importBools {
+					assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
+				}
+				for i, spec := range tc.importStrings {
+					assert.Equal(t, spec.want, *istring[i], "string "+spec.name)
+				}
 			}
-			require.NoError(t, err, "configure")
-			assert.Equal(t, tc.want, tc.base, "data")
-			assert.Equal(t, 1, called, "onstart call count")
-			if tc.sub == "" {
-				assert.Equal(t, map[string]int{}, subcalled, "sub called")
-			} else {
-				assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
-			}
-			for i, spec := range tc.importBools {
-				assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
-			}
-			for i, spec := range tc.importStrings {
-				assert.Equal(t, spec.want, *istring[i], "string "+spec.name)
+			if tc.wantExport != nil || tc.exportCmd != "" || tc.exportToo {
+				exportBase := deepcopy.Copy(tc.base)
+				fs := flag.NewFlagSet("foo", flag.ContinueOnError)
+				require.NoError(t, ExportToFlagSet(fs, "flag", exportBase), "export flagset")
+				args := strings.Split(tc.cmd, " ")
+				if tc.exportCmd != "" {
+					args = strings.Split(tc.exportCmd, " ")
+				}
+				require.NoError(t, fs.Parse(args), "parse exported flags")
+				want := tc.want
+				if tc.wantExport != nil {
+					want = tc.wantExport
+				}
+				assert.Equal(t, want, exportBase, "data")
 			}
 		})
 	}

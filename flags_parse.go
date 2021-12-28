@@ -377,6 +377,27 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 		setterType = nonPointerType.Elem()
 	}
 	err := tag.Fill(&ref)
+	switch ref.Split {
+	case "none":
+		ref.Split = ""
+	case "equal", "equals":
+		ref.Split = "="
+	case "comma":
+		ref.Split = ","
+	case "quote":
+		ref.Split = `"`
+	case "space":
+		ref.Split = " "
+	case "explode":
+		switch nonPointerType.Kind() {
+		case reflect.Slice:
+			ref.Split = ""
+		case reflect.Array:
+			ref.explode = nonPointerType.Len()
+		default:
+			return ref, nil, nil, ProgrammerError(errors.New("split=explode tag is for slice, array types only"))
+		}
+	}
 	return ref, setterType, nonPointerType, err
 }
 
@@ -394,35 +415,13 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 		if tag.Tag == "" {
 			return true
 		}
-		ref, setterType, nonPointerType, err := parseFlagRef(tag, f.Type)
+		ref, setterType, _, err := parseFlagRef(tag, f.Type)
 		if err != nil {
 			walkErr = err
 			return true
 		}
 		ref.fieldName = f.Name
 		h.rawData = append(h.rawData, f)
-		switch ref.Split {
-		case "none":
-			ref.Split = ""
-		case "equal", "equals":
-			ref.Split = "="
-		case "comma":
-			ref.Split = ","
-		case "quote":
-			ref.Split = `"`
-		case "space":
-			ref.Split = " "
-		case "explode":
-			switch nonPointerType.Kind() {
-			case reflect.Slice:
-				ref.Split = ""
-			case reflect.Array:
-				ref.explode = nonPointerType.Len()
-			default:
-				walkErr = ProgrammerError(errors.New("split=explode tag is for slice, array types only"))
-				return false
-			}
-		}
 		if ref.isMap {
 			if ref.Split != "=" && ref.Map == "prefix" {
 				walkErr = ProgrammerError(errors.New("map=prefix requires split=equals"))

@@ -107,13 +107,22 @@ type file struct {
 // sources of configuration (Filler interface) and consumers of
 // configuration (Requests).  Eventually call Configure() on the
 // returned registry.
+//
+// The following default Fillers are registered:
+//
+//	env		fill from environment variables
+//	config		fill from configuration files
+//	default		fill from the tag value
+//
+// Use WithFiller to adjust the set of fillers and to add
+// a command-line flags filler.
 func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
 		registryConfig: registryConfig{
 			metaTag: "nfigure",
 			fillers: newFillerCollection().
 				Build("env", NewEnvFiller()).
-				Build("source", NewFileFiller()).
+				Build("config", NewFileFiller()).
 				Build("default", NewDefaultFiller()),
 		},
 	}

@@ -32,7 +32,6 @@ type LookupFillerOpt func(*LookupFiller)
 //		WeightFactor float64  `env:"WEIGHT_FACTOR"`
 //		Groups       []string `env:"GROUPS,split=|"`
 //	}
-//
 func NewEnvFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFillerSimple(os.LookupEnv,
 		append([]LookupFillerOpt{WrapLookupErrors(EnvironmentError)},

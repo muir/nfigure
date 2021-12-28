@@ -9,6 +9,8 @@ import (
 	"runtime"
 )
 
+var debugging = true
+
 func debugf(fmt string, args ...interface{}) {
 	log.Printf(fmt, args...)
 }

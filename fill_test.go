@@ -47,7 +47,7 @@ func TestMetaFirstScalar(t *testing.T) {
 		called++
 	}))
 	registry := NewRegistry(
-		WithFiller("source", nil),
+		WithFiller("config", nil),
 		WithFiller("flag", fh),
 		WithFiller("nf", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 		WithMetaTag("meta"),

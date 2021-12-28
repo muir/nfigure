@@ -100,7 +100,8 @@ func (h *FlagHandler) importFlags() error {
 // ExportToFlagSet only exports flags.
 //
 // Subcommands are not supported by the "flag" package and will be ignored
-// by ExportToFlagSet.
+// by ExportToFlagSet.  Counters are not supported by the "flag" package and
+// will be treated as numerical types.
 //
 // If a flag has multiple aliases, only the first name will be used.
 func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) error {
@@ -116,12 +117,19 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 	}
 
 	value := reflect.ValueOf(model)
+	nonPtr := value
+	for nonPtr.Type().Kind() == reflect.Ptr {
+		if nonPtr.IsNil() {
+			return ProgrammerError(errors.New("Must provide a model or pointer to model, not nil"))
+		}
+		nonPtr = nonPtr.Elem()
+	}
 
 	for _, f := range h.rawData {
 		f := f
-		v := value.FieldByIndex(f.Index)
+		v := nonPtr.FieldByIndex(f.Index)
 		tagSet := reflectutils.SplitTag(f.Tag).Set()
-		tag := tagSet.Get(h.tagName)
+		tag := tagSet.Get(tagName)
 		defaultValue := tagSet.Get(defaultTag)
 		ref, setterType, nonPointerType, err := parseFlagRef(tag, f.Type)
 		if err != nil {
@@ -145,7 +153,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 			getV = func() reflect.Value {
 				v := current()
 				if v.IsNil() {
-					v.Set(reflect.New(vt.Elem()).Elem())
+					v.Set(reflect.New(v.Type().Elem()))
 				}
 				return v.Elem()
 			}
@@ -162,6 +170,8 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 			}
 		}
 		switch {
+		case len(ref.Name) == 0:
+			return NFigureError(errors.New("missing name"))
 		case ref.isBool:
 			v := getV()
 			var defaultBool bool
@@ -173,38 +183,6 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				}
 			}
 			fs.BoolVar(v.Addr().Interface().(*bool), ref.Name[0], defaultBool, help)
-		case ref.IsCounter:
-			switch vt.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				fs.Func(ref.Name[0], help, func(s string) error {
-					v := getV()
-					v.SetInt(v.Int() + 1)
-					if s != "" {
-						return setter(v, s)
-					}
-					return nil
-				})
-			case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				fs.Func(ref.Name[0], help, func(s string) error {
-					v := getV()
-					v.SetUint(v.Uint() + 1)
-					if s != "" {
-						return setter(v, s)
-					}
-					return nil
-				})
-			case reflect.Float32, reflect.Float64:
-				fs.Func(ref.Name[0], help, func(s string) error {
-					v := getV()
-					v.SetFloat(v.Float() + 1)
-					if s != "" {
-						return setter(v, s)
-					}
-					return nil
-				})
-			default:
-				return ProgrammerError(errors.Errorf("Invalid type for increment %s", vt))
-			}
 		case ref.isMap:
 			ks, err := reflectutils.MakeStringSetter(nonPointerType.Key())
 			if err != nil {
@@ -290,6 +268,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 						v.Set(reflect.AppendSlice(v, a))
 					} else {
 						v.Set(a)
+						once = true
 					}
 					return nil
 				})
@@ -298,11 +277,17 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 			}
 
 		default:
-			err := setter(v, ref.values[len(ref.values)-1])
-			if err != nil {
-				return UsageError(errors.Wrap(err, ref.used[len(ref.values)-1]))
-			}
+			fs.Func(ref.Name[0], help, func(s string) error {
+				err := setter(v, s)
+				return UsageError(errors.Wrap(err, s))
+			})
 		}
 	}
+	if debugging {
+		fs.VisitAll(func(f *flag.Flag) {
+			fmt.Printf("export defined -%s\n", f.Name)
+		})
+	}
+
 	return nil
 }

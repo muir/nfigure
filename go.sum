@@ -29,6 +29,8 @@ github.com/magiconair/properties v1.7.4-0.20170902060319-8d7837e64d3c/go.mod h1:
 github.com/mattn/go-colorable v0.0.10-0.20170816031813-ad5389df28cd/go.mod h1:9vuHe8Xs5qXnSaW/c/ABM9alt+Vo+STaOChaDxuIBZU=
 github.com/mattn/go-isatty v0.0.2/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNxMWT7Zi4=
 github.com/mitchellh/mapstructure v0.0.0-20170523030023-d0303fe80992/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
+github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
+github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826/go.mod h1:TaXosZuwdSHYgviHp1DAtfrULt5eUgsSMsZf+YrPgl8=
 github.com/muir/nject v0.1.1 h1:iyaoXzpkEI9dx7kRMymfWP3dDxQ9FYRIAD1X1lYorYU=
 github.com/muir/nject v0.1.1/go.mod h1:+NaR9kNQTwzQhSNKnM+oOtlb9JrLETrkKkkSsjtFuLc=
 github.com/muir/reflectutils v0.0.2/go.mod h1:hyMWDtoeNsc1FTq9qlXsbwDzbwp3A3M8zbRNKDzvSmc=

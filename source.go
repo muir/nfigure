@@ -28,6 +28,17 @@ func WithUnmarshalOpts(opts ...nflex.UnmarshalFileArg) FileFillerOpts {
 	}
 }
 
+// NewFileFiller creates a CanAddConfigFileFiller filler that implements
+// AddConfigFile.  Unlike most other fillers, file fillers will fill values
+// without explicit tags by matching config fields to struct field names.
+//
+// To prevent a match, tag it with "-":
+//
+//	type MyStruct struct {
+//		PrivateField string `config:"-"`       // don't fill this one
+//		MyField      string `config:"myField"` // fill this one
+//	}
+//
 func NewFileFiller(opts ...FileFillerOpts) FileFiller {
 	s := FileFiller{}
 	for _, f := range opts {
@@ -54,6 +65,7 @@ type fileTag struct {
 	Name string `pt:"0"`
 }
 
+// Recurse is part of the CanRecurseFiller contract and is called by registry.Configure()
 func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
 	if s.source == nil {
 		debug("source: recurse -> no filler(nil)", name, "from", callers(4))
@@ -86,6 +98,7 @@ func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (
 	}, nil
 }
 
+// Keys is part of the CanKeysFiller contract and is called by registry.Configure()
 func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, first, combine bool) ([]string, bool) {
 	source := nflex.MultiSourceSetFirst(first).
 		Combine(nflex.MultiSourceSetCombine(combine)).
@@ -97,6 +110,7 @@ func (s FileFiller) Keys(t reflect.Type, tag reflectutils.Tag, first, combine bo
 	return keys, source.Exists()
 }
 
+// Len is part of the CanLenFiller contract and is called by registry.Configure()
 func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool) {
 	source := nflex.MultiSourceSetFirst(firstFirst).
 		Combine(nflex.MultiSourceSetCombine(combineObjects)).
@@ -108,6 +122,7 @@ func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, c
 	return length, source.Exists()
 }
 
+// Fill is part of the Filler contract and is called by registry.Configure()
 func (s FileFiller) Fill(
 	t reflect.Type,
 	v reflect.Value,

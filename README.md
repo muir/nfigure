@@ -133,5 +133,83 @@ For boolean values, negation is "--no-":
 
 ## Best Practices
 
-### Best Practices for library writers
+### Best Practices for existing libraries
+
+Libraries that are already published and using the standard "flag" package
+can be refactored to use nfigure.  If they register themselves with flag during
+init, then that behavior should be retained:
+
+```go
+package mylibrary 
+
+import (
+	"flag"
+	"github.com/muir/nfigure"
+)
+
+type MyConfig struct {
+	MyField string `flag:"myfield"`
+}
+
+sub init() {
+	err := nfigure.ExportToFlagSet(flag.CommandLine, "flag", &MyConfig)
+	if err != nil {
+		panic(err.Error())
+	}
+}
+```
+
+In a program that is using nfigure, MyConfig can be explicitly imported:
+
+```go
+registery.Request(&mylibrary.MyConfig)
+```
+
+However, if there are other libraries that only support "flag" and they're being
+imported:
+
+```go
+GoFlagHandler(nfigure.ImportFlagSet(flag.CommandLine))
+```
+
+Then MyConfig should not also be explicity imported since that would end up
+with the flags being defined twice.
+
+### Best practices for new libraries
+
+New libraries should use nfigure to handle their configruation needs.  The suggested
+way to do this is to have a New function that takes a registry as arguments.
+
+Separate New() and Start() so that configuation can happen after New() but before Start().
+
+Users of your library can use NewWithRegistry() if they're using nfigure.  For other
+users, they can fill MyConfig by hand or use FillConfigFromCommandline() to populate it
+with command line parsing.
+
+```go
+func NewWithRegistry(registry *nfigure.Registry) mySelf {
+	var config MyConfig
+	registry.Request(&config)
+	...
+}
+
+func FillConfigFromCommandline() *MyConfig {
+	var config MyConfig
+	registery.Request(&config)
+	return &config
+}
+
+func NewWithConfig(config MyConfig) mySelf {
+	...
+}
+```
+
+### Best practices for program writers
+
+Use nfigure everywhere!  Be careful not to combine ImportFlagSet with
+registry.Request() of the same models that are ExportToFlagSet()ed 
+in library inits.
+
+Separate library creation from library starting.  Allow configuration
+to be deferred until until library start.
 
