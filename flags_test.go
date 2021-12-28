@@ -44,6 +44,19 @@ type flagSet5 struct {
 	P *map[string]bool   `flag:"P,map=explode,split=/"`
 }
 
+type importBool struct {
+	name string
+	dflt bool
+	help string
+	want bool
+}
+type importString struct {
+	name string
+	dflt string
+	help string
+	want string
+}
+
 var cases = []struct {
 	base           interface{}
 	cmd            string
@@ -56,6 +69,8 @@ var cases = []struct {
 	wantSub        interface{}
 	capture        string // re-run in sub-process capturing output
 	additionalArgs []FlaghandlerOptArg
+	importBools    []importBool
+	importStrings  []importString
 }{
 	{
 		base: &flagSet1{},
@@ -322,6 +337,51 @@ var cases = []struct {
 			this is additional help text
 			`),
 	},
+	{
+		base: &flagSet3{},
+		importBools: []importBool{
+			{
+				name: "foo",
+				dflt: true,
+				help: "foo er",
+				want: false,
+			},
+			{
+				name: "bar",
+				dflt: true,
+				help: "bar er",
+				want: true,
+			},
+			{
+				name: "baz",
+				dflt: false,
+				help: "baz er",
+				want: true,
+			},
+			{
+				name: "bing",
+				dflt: false,
+				help: "bing er",
+				want: false,
+			},
+		},
+		importStrings: []importString{
+			{
+				name: "alpha",
+				dflt: "xyz",
+				help: "alpha er",
+				want: "xyz",
+			},
+			{
+				name: "beta",
+				dflt: "abc",
+				help: "beta er",
+				want: "def",
+			},
+		},
+		cmd:  "--no-foo --baz --beta=def",
+		want: &flagSet3{},
+	},
 }
 
 func pointerToPointerToPonterToFloat64(f float64) ***float64 {
@@ -352,6 +412,22 @@ func TestFlags(t *testing.T) {
 				}),
 			}
 			args = append(args, tc.additionalArgs...)
+			bools := make([]*bool, len(tc.importBools))
+			if tc.importBools != nil {
+				fs := flag.NewFlagSet("importedBools", flag.ContinueOnError)
+				for i, spec := range tc.importBools {
+					bools[i] = fs.Bool(spec.name, spec.dflt, spec.help)
+				}
+				args = append(args, ImportFlagSet(fs))
+			}
+			istring := make([]*string, len(tc.importStrings))
+			if tc.importStrings != nil {
+				fs := flag.NewFlagSet("importedStrings", flag.ContinueOnError)
+				for i, spec := range tc.importStrings {
+					istring[i] = fs.String(spec.name, spec.dflt, spec.help)
+				}
+				args = append(args, ImportFlagSet(fs))
+			}
 			fh := PosixFlagHandler(args...)
 			subcalled := make(map[string]int)
 			for sub, model := range tc.subcommands {
@@ -405,6 +481,12 @@ func TestFlags(t *testing.T) {
 				assert.Equal(t, map[string]int{}, subcalled, "sub called")
 			} else {
 				assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
+			}
+			for i, spec := range tc.importBools {
+				assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
+			}
+			for i, spec := range tc.importStrings {
+				assert.Equal(t, spec.want, *istring[i], "string "+spec.name)
 			}
 		})
 	}
