@@ -1,6 +1,7 @@
 package nfigure
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"reflect"
@@ -18,7 +19,7 @@ import (
 //
 // 1. PosixFlagHandler() or GoFlagHandler()
 // 2. PreWalk()
-// 3. PreConfigure() -- calls parseFlags()
+// 3. PreConfigure() -- calls parseFlags() and importFlags()
 // 4. Fill()
 // 5. ConfigureComplete()
 
@@ -93,6 +94,7 @@ type FlagHandler struct {
 	helpText           *string // if not-nil, implies --help flag and help subcommmand
 	helpAlreadyAdded   bool
 	alreadyParsed      bool
+	imported           []*flagRef
 }
 
 var _ CanPreWalkFiller = &FlagHandler{}
@@ -132,6 +134,7 @@ type flagRef struct {
 	setters   map[setterKey]func(reflect.Value, string) error
 	fieldName string
 	tagValue  string
+	imported  *flag.Flag
 	typ       reflect.Type
 }
 
@@ -243,7 +246,11 @@ func (h *FlagHandler) PreConfigure(tagName string, registry *Registry) error {
 			return err
 		}
 	}
-	return h.parseFlags(1) // 0 is the program name so we skip it
+	err := h.parseFlags(1) // 0 is the program name so we skip it
+	if err != nil {
+		return err
+	}
+	return h.importFlags()
 }
 
 // ConfigureComplete is part of the Filler contract.  It is called by Registery.Configure
@@ -309,6 +316,59 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.positionalHelp = positionalHelp
 		return nil
+	}
+}
+
+// FlagSet is implemented by the standard "flag" FlagSet.
+type FlagSet interface {
+	VisitAll(fn func(*flag.Flag))
+}
+
+var _ FlagSet = &flag.FlagSet{}
+
+type hasIsBool interface {
+	IsBoolFlag() bool
+}
+
+// ImportFlagSet pulls in flags defined with the standard "flag"
+// package.  This is useful when there are libaries being used
+// that define flags.
+//
+// flag.CommandLine is the default FlagSet.
+//
+// ImportFlagSet is not the recommended way to use nfigure, but sometimes
+// there is no choice.
+func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		if fs.Parsed() {
+			return errors.New("Cannot import FlagSets that have been parsed")
+		}
+		var err error
+		fs.VisitAll(func(f *flag.Flag) {
+			var isBool bool
+			if hib, ok := f.Value.(hasIsBool); ok {
+				isBool = hib.IsBoolFlag()
+			}
+			ref := &flagRef{
+				flagTag: flagTag{
+					Name: []string{f.Name},
+				},
+				flagRefComparable: flagRefComparable{
+					isBool: isBool,
+				},
+				imported: f,
+			}
+			switch utf8.RuneCountInString(f.Name) {
+			case 0:
+				err = errors.New("Invalid flag in FlagSet with no Name")
+			case 1:
+				h.shortFlags[f.Name] = ref
+			default:
+				h.longFlags[f.Name] = ref
+			}
+			h.imported = append(h.imported, ref)
+		})
+		return err
 	}
 }
 
@@ -405,8 +465,9 @@ func (h *FlagHandler) clearParse() {
 			ref.keys = nil
 		}
 	}
-	for _, sub := range h.subcommands {
-		sub.clearParse()
+	if h.selectedSubcommand != "" {
+		h.subcommands[h.selectedSubcommand].clearParse()
+		h.selectedSubcommand = ""
 	}
 }
 
@@ -448,15 +509,15 @@ func (o opt) format(doubleDash bool) string {
 	case optionOpt:
 		b.WriteRune('-')
 		b.WriteString(o.name)
-		if o.nonPointer.Kind() == reflect.Map {
+		if o.ref.imported == nil && o.nonPointer.Kind() == reflect.Map {
 			b.WriteRune('<')
-			b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
+			b.WriteString(o.describeArg(o.ref, o.nonPointer.Key(), "key", ""))
 			b.WriteString(">=<")
-			b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
+			b.WriteString(o.describeArg(o.ref, o.nonPointer.Elem(), "value", ""))
 			b.WriteRune('>')
 		} else {
 			b.WriteRune(' ')
-			b.WriteString(o.describeArg(o.nonPointer, o.f.Name, o.ref.ArgName))
+			b.WriteString(o.describeArg(o.ref, o.nonPointer, o.f.Name, o.ref.ArgName))
 		}
 	case parameterOpt:
 		b.WriteRune('-')
@@ -467,44 +528,61 @@ func (o opt) format(doubleDash bool) string {
 			b.WriteString("[no-]")
 		}
 		b.WriteString(o.name)
-		switch o.nonPointer.Kind() {
-		case reflect.Bool:
-		case reflect.Map:
-			if o.ref.Map == "prefix" {
-				b.WriteRune('<')
-				b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
-				b.WriteString(">=<")
-				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
-				b.WriteRune('>')
-			} else {
-				b.WriteRune(' ')
-				b.WriteString(o.describeArg(o.nonPointer.Key(), "key", ""))
-				b.WriteString(o.ref.Split)
-				b.WriteString(o.describeArg(o.nonPointer.Elem(), "value", ""))
+		if o.ref.imported != nil {
+			if !o.ref.isBool {
+				if doubleDash {
+					b.WriteRune('=')
+				} else {
+					b.WriteRune(' ')
+				}
+				b.WriteString(o.describeArg(o.ref, o.nonPointer, o.f.Name, o.ref.ArgName))
 			}
-		default:
-			if doubleDash {
-				b.WriteRune('=')
-			} else {
-				b.WriteRune(' ')
+		} else {
+			switch o.nonPointer.Kind() {
+			case reflect.Bool:
+			case reflect.Map:
+				if o.ref.Map == "prefix" {
+					b.WriteRune('<')
+					b.WriteString(o.describeArg(o.ref, o.nonPointer.Key(), "key", ""))
+					b.WriteString(">=<")
+					b.WriteString(o.describeArg(o.ref, o.nonPointer.Elem(), "value", ""))
+					b.WriteRune('>')
+				} else {
+					b.WriteRune(' ')
+					b.WriteString(o.describeArg(o.ref, o.nonPointer.Key(), "key", ""))
+					b.WriteString(o.ref.Split)
+					b.WriteString(o.describeArg(o.ref, o.nonPointer.Elem(), "value", ""))
+				}
+			default:
+				if doubleDash {
+					b.WriteRune('=')
+				} else {
+					b.WriteRune(' ')
+				}
+				b.WriteString(o.describeArg(o.ref, o.nonPointer, o.f.Name, o.ref.ArgName))
 			}
-			b.WriteString(o.describeArg(o.nonPointer, o.f.Name, o.ref.ArgName))
 		}
 	}
 	b.WriteString(optional)
 	return b.String()
 }
 
-func (o opt) describeArg(typ reflect.Type, name string, override string) string {
+func (o opt) describeArg(ref flagRef, typ reflect.Type, name string, override string) string {
+	if typ == nil {
+		if ref.isBool {
+			return "true|false"
+		}
+		return ref.Name[0]
+	}
 	if override != "" {
 		debugf("argname %s", override)
 	}
 	switch typ.Kind() {
 	case reflect.Slice:
-		ed := o.describeArg(typ.Elem(), name, override)
+		ed := o.describeArg(ref, typ.Elem(), name, override)
 		return ed + o.ref.Split + ed + "..."
 	case reflect.Array:
-		ed := o.describeArg(typ.Elem(), name, override)
+		ed := o.describeArg(ref, typ.Elem(), name, override)
 		return strings.Join(repeatString(ed, typ.Len()), o.ref.Split)
 	}
 	if override != "" {
@@ -585,18 +663,8 @@ func (h *FlagHandler) Usage() string {
 				lead.alts = append(lead.alts, o)
 			}
 
-			switch utf8.RuneCountInString(n) {
-			case 0:
-				continue
-			case 1:
-				if ref.isBool {
-					o.category = flagOpt
-				} else {
-					o.category = optionOpt
-				}
-			default:
-				o.category = parameterOpt
-			}
+			o.category = getCategory(n, ref)
+
 			if ref.Required {
 				required[o.category] = append(required[o.category], o)
 				break
@@ -604,6 +672,22 @@ func (h *FlagHandler) Usage() string {
 			optional[o.category] = append(optional[o.category], o)
 		}
 	}
+	// This is a non-overlapping set with h.rawData
+	for _, ref := range h.imported {
+		help := ref.imported.Usage
+		if ref.imported.DefValue != "" {
+			help += fmt.Sprintf(" (defaults to %s)", ref.imported.DefValue)
+		}
+		o := &opt{
+			name:    ref.imported.Name,
+			help:    help,
+			primary: true,
+			ref:     *ref,
+		}
+		o.category = getCategory(ref.Name[0], *ref)
+		optional[o.category] = append(optional[o.category], o)
+	}
+
 	usage := make([]string, 0, len(h.rawData)*2+10+len(h.subcommands)*2)
 	usage = append(usage, "Usage: "+os.Args[0])
 
@@ -691,6 +775,15 @@ func (h *FlagHandler) Usage() string {
 	return strings.Join(usage, "")
 }
 
-//
-// program [flags] [--xyz number] subcommand
-//
+func getCategory(name string, ref flagRef) optCategory {
+	switch utf8.RuneCountInString(name) {
+	case 1:
+		if ref.isBool {
+			return flagOpt
+		} else {
+			return optionOpt
+		}
+	default:
+		return parameterOpt
+	}
+}

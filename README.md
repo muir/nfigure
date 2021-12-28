@@ -131,3 +131,7 @@ For boolean values, negation is "--no-":
 
 	-no-verbose
 
+## Best Practices
+
+### Best Practices for library writers
+

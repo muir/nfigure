@@ -200,6 +200,35 @@ func (h *FlagHandler) parseFlags(i int) error {
 	return nil
 }
 
+// importFlags deals with setting values for standard "flags" that have been
+// imported.
+func (h *FlagHandler) importFlags() error {
+	for _, ref := range h.imported {
+		switch len(ref.values) {
+		case 0:
+			if ref.imported.DefValue != "" {
+				err := ref.imported.Value.Set(ref.imported.DefValue)
+				if err != nil {
+					return errors.Errorf("Cannot set default value for flag '%s': %s",
+						ref.imported.Name, err)
+				}
+			}
+		case 1:
+			err := ref.imported.Value.Set(ref.values[0])
+			if err != nil {
+				return errors.Errorf("Cannot set value for flag '%s': %s",
+					ref.imported.Name, err)
+			}
+		default:
+			return errors.Errorf("Cannot set multiple values for flag '%s'", ref.imported.Name)
+		}
+	}
+	if h.selectedSubcommand != "" {
+		return h.subcommands[h.selectedSubcommand].importFlags()
+	}
+	return nil
+}
+
 // Fill is part of the Filler interface and will be invoked by Registry.Configure().
 //
 // Fill may be called multiple times for the same field: if it's a

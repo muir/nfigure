@@ -13,12 +13,6 @@ nflex: .ini & .xml -- a wrapper for general unmarshal
 
 global registry
 
-"help" subcommand
-
---help message
-
-best practices for library writers
-
 validate tests
 
 validation of flags causes usage error
@@ -34,3 +28,12 @@ test where names do not match
 split deindent out to its own package
 
 test double-level nested structs
+
+best practices for library writers
+
+import "flags" flags
+
+export to "flags"
+
+
+

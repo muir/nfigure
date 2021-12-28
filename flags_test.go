@@ -1,12 +1,14 @@
 package nfigure
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -288,6 +290,36 @@ var cases = []struct {
 
 			Subcommands:
 			    help                 provide this usage info
+			`),
+	},
+	{
+		base: &flagSet5{},
+		cmd:  "--dur=30m --help",
+		additionalArgs: []FlaghandlerOptArg{
+			WithHelpText("this is additional help text"),
+			ImportFlagSet(func() *flag.FlagSet {
+				fs := flag.NewFlagSet("foo", flag.ContinueOnError)
+				_ = fs.Bool("bb", true, "set the great bb")
+				_ = fs.Duration("dur", 30*time.Minute, "set a duration")
+				return fs
+			}()),
+		},
+		want: &flagSet5{
+			O: map[complex128]int{
+				3 + 4i:   7,
+				9.3 - 2i: -13,
+			},
+		},
+		capture: deindent(`
+			Usage: PROGRAME-NAME [-options args] [parameters]
+			
+			Options:
+			     [-O<X+Yi>=<int>]               set O (map[complex128]int)
+			     [-P<key>=<true|false>]         set P (*map[string]bool)
+			     [--[no-]bb]                    set the great bb (defaults to true)
+			     [--dur=dur]                    set a duration (defaults to 30m0s)
+			
+			this is additional help text
 			`),
 	},
 }
