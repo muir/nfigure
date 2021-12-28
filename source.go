@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// FileFiller implements the Filler contract
 type FileFiller struct {
 	source          nflex.Source
 	umarshalOptions []nflex.UnmarshalFileArg

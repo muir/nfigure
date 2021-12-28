@@ -73,6 +73,7 @@ import (
 //		DebugLevel int `flag:"d,counter"`
 //	}
 //
+// FlagHandler implements the Filler interface
 type FlagHandler struct {
 	fhInheritable
 	Parent             *FlagHandler // set only for subcommands
