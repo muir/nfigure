@@ -95,6 +95,7 @@ type FlagHandler struct {
 	helpAlreadyAdded   bool
 	alreadyParsed      bool
 	imported           []*flagRef
+	defaultTag         string
 }
 
 var _ CanPreWalkFiller = &FlagHandler{}
@@ -319,6 +320,16 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 	}
 }
 
+// WithDefaultsTag is only relevant when used with ExportToFlagSet().  It
+// overrides the tag used for finding default values.  The default default
+// tag is "default".
+func WithDefaultsTag(defaultTag string) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.defaultTag = defaultTag
+		return nil
+	}
+}
+
 // FlagHelpTag specifies the name of the tag to use for providing
 // per-flag help summaries.  For example, you may want:
 //
@@ -393,6 +404,7 @@ func (h *FlagHandler) AddSubcommand(command string, usageSummary string, configM
 		Parent:        h,
 		configModel:   configModel,
 		usageSummary:  usageSummary,
+		defaultTag:    h.defaultTag,
 	}
 	h.subcommands[command] = sub
 	h.subcommandsOrder = append(h.subcommandsOrder, command)

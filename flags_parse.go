@@ -295,7 +295,7 @@ func (h *FlagHandler) Fill(
 			for i, value := range ref.values {
 				key := ref.keys[i]
 				debugf("flagfill map %s = %s %s %s", key, value, nonPointerType.Key(), nonPointerType.Elem())
-				kp := reflect.New(t.Key())
+				kp := reflect.New(nonPointerType.Key())
 				err := ks(kp.Elem(), key)
 				if err != nil {
 					return false, UsageError(errors.Wrapf(err, "key for %s", ref.used[i]))
@@ -319,14 +319,14 @@ func (h *FlagHandler) Fill(
 				return false, ProgrammerError(errors.Wrap(err, ref.used[0]))
 			}
 			var a reflect.Value
-			switch t.Kind() {
+			switch nonPointerType.Kind() {
 			case reflect.Array:
 				a = v
 				if len(ref.values) > v.Len() {
 					ref.values = ref.values[0:v.Len()]
 				}
 			case reflect.Slice:
-				a = reflect.MakeSlice(t, len(ref.values), len(ref.values))
+				a = reflect.MakeSlice(nonPointerType, len(ref.values), len(ref.values))
 				v.Set(a)
 			default:
 				return false, NFigureError(errors.Errorf("internal error: not expecting %s", t))
@@ -385,7 +385,7 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 // PreWalk examines configuration blocks and figures out the flags that
 // are defined.  It's possible that more than one field in various config
 // blocks references the same flag name.
-func (h *FlagHandler) PreWalk(tagName string, request *Request, model interface{}) error {
+func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 	v := reflect.ValueOf(model)
 	var walkErr error
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {

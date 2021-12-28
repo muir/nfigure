@@ -243,7 +243,7 @@ func (r *Registry) preWalkLocked(request *Request) error {
 		if !ok {
 			continue
 		}
-		err := filler.PreWalk(tag, request, request.object)
+		err := filler.PreWalk(tag, request.object)
 		if err != nil {
 			return errors.Wrap(err, tag)
 		}

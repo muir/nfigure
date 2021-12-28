@@ -48,7 +48,7 @@ type CanPreWalkFiller interface {
 	Filler
 	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
 	// struct before any call to Fill()
-	PreWalk(tagName string, request *Request, model interface{}) error
+	PreWalk(tagName string, model interface{}) error
 }
 
 type CanConfigureCompleteFiller interface {
