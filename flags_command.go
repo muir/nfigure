@@ -319,59 +319,6 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 	}
 }
 
-// FlagSet is implemented by the standard "flag" FlagSet.
-type FlagSet interface {
-	VisitAll(fn func(*flag.Flag))
-}
-
-var _ FlagSet = &flag.FlagSet{}
-
-type hasIsBool interface {
-	IsBoolFlag() bool
-}
-
-// ImportFlagSet pulls in flags defined with the standard "flag"
-// package.  This is useful when there are libaries being used
-// that define flags.
-//
-// flag.CommandLine is the default FlagSet.
-//
-// ImportFlagSet is not the recommended way to use nfigure, but sometimes
-// there is no choice.
-func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
-	return func(h *FlagHandler) error {
-		if fs.Parsed() {
-			return errors.New("Cannot import FlagSets that have been parsed")
-		}
-		var err error
-		fs.VisitAll(func(f *flag.Flag) {
-			var isBool bool
-			if hib, ok := f.Value.(hasIsBool); ok {
-				isBool = hib.IsBoolFlag()
-			}
-			ref := &flagRef{
-				flagTag: flagTag{
-					Name: []string{f.Name},
-				},
-				flagRefComparable: flagRefComparable{
-					isBool: isBool,
-				},
-				imported: f,
-			}
-			switch utf8.RuneCountInString(f.Name) {
-			case 0:
-				err = errors.New("Invalid flag in FlagSet with no Name")
-			case 1:
-				h.shortFlags[f.Name] = ref
-			default:
-				h.longFlags[f.Name] = ref
-			}
-			h.imported = append(h.imported, ref)
-		})
-		return err
-	}
-}
-
 // FlagHelpTag specifies the name of the tag to use for providing
 // per-flag help summaries.  For example, you may want:
 //
