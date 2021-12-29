@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mohae/deepcopy"
+	"github.com/muir/commonerrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.octolab.org/pointer"
@@ -496,7 +497,7 @@ func TestFlags(t *testing.T) {
 				if tc.error != "" {
 					if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
 						assert.Contains(t, err.Error(), tc.error, "configure error")
-						assert.True(t, IsUsageError(err), "is usage error")
+						assert.True(t, commonerrors.IsUsageError(err), "is usage error")
 					}
 					return
 				}

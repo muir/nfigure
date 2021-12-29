@@ -68,7 +68,7 @@ func WithoutFillers() RegistryFuncArg {
 // WithValidate registers a validation function to be used to check
 // configuration structs after the configuration is complete.  Errors
 // reported by the validation function will be wrapped with
-// ValidationError and returned by Registry.Configgure()
+// commonerrors.ValidationError and returned by Registry.Configgure()
 func WithValidate(v Validate) RegistryFuncArg {
 	return func(r *registryConfig) {
 		r.validator = v

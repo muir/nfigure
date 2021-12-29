@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
@@ -34,7 +35,7 @@ type LookupFillerOpt func(*LookupFiller)
 //	}
 func NewEnvFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFillerSimple(os.LookupEnv,
-		append([]LookupFillerOpt{WrapLookupErrors(EnvironmentError)},
+		append([]LookupFillerOpt{WrapLookupErrors(commonerrors.EnvironmentError)},
 			opts...)...)
 }
 
@@ -112,14 +113,14 @@ func (e LookupFiller) Fill(
 	var tagData envTag
 	err := tag.Fill(&tagData)
 	if err != nil {
-		return false, ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
+		return false, commonerrors.ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
 	}
 	if tagData.Variable == "" {
 		return false, nil
 	}
 	value, ok, err := e.lookup(tagData.Variable, tag.Value)
 	if err != nil {
-		return false, ProgrammerError(errors.Wrapf(err, tag.Tag))
+		return false, commonerrors.ProgrammerError(errors.Wrapf(err, tag.Tag))
 	}
 	if !ok {
 		return false, nil
@@ -130,7 +131,7 @@ func (e LookupFiller) Fill(
 	}
 	setter, err := reflectutils.MakeStringSetter(t, ssa...)
 	if err != nil {
-		return false, ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
+		return false, commonerrors.ProgrammerError(errors.Wrapf(err, "%s tag", tag.Tag))
 	}
 	err = setter(v, value)
 	if err != nil {

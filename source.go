@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/nfigure/nflex"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
@@ -75,7 +76,7 @@ func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (
 		var fileTag fileTag
 		err := tag.Fill(&fileTag)
 		if err != nil {
-			return nil, ProgrammerError(errors.Wrap(err, tag.Tag))
+			return nil, commonerrors.ProgrammerError(errors.Wrap(err, tag.Tag))
 		}
 		switch fileTag.Name {
 		case "-":
@@ -139,38 +140,38 @@ func (s FileFiller) Fill(
 		i, err := source.GetInt()
 		if err != nil {
 			debug("source: could not fill int", err)
-			return false, ConfigurationError(err)
+			return false, commonerrors.ConfigurationError(err)
 		}
 		v.SetInt(i)
 		return true, nil
 	case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		i, err := source.GetInt()
 		if err != nil {
-			return false, ConfigurationError(err)
+			return false, commonerrors.ConfigurationError(err)
 		}
 		if i < 0 {
-			return false, ConfigurationError(errors.Errorf("attempt to set %T to negative value", t))
+			return false, commonerrors.ConfigurationError(errors.Errorf("attempt to set %T to negative value", t))
 		}
 		v.SetUint(uint64(i))
 		return true, nil
 	case reflect.Float32, reflect.Float64:
 		f, err := source.GetFloat()
 		if err != nil {
-			return false, ConfigurationError(err)
+			return false, commonerrors.ConfigurationError(err)
 		}
 		v.SetFloat(f)
 		return true, nil
 	case reflect.Bool:
 		b, err := source.GetBool()
 		if err != nil {
-			return false, ConfigurationError(err)
+			return false, commonerrors.ConfigurationError(err)
 		}
 		v.SetBool(b)
 		return true, nil
 	case reflect.String:
 		s, err := source.GetString()
 		if err != nil {
-			return false, ConfigurationError(err)
+			return false, commonerrors.ConfigurationError(err)
 		}
 		v.SetString(s)
 		return true, nil
@@ -179,29 +180,29 @@ func (s FileFiller) Fill(
 		case nflex.String:
 			s, err := source.GetString()
 			if err != nil {
-				return false, ConfigurationError(err)
+				return false, commonerrors.ConfigurationError(err)
 			}
 			c, err := strconv.ParseComplex(s, 128)
 			if err != nil {
-				return false, ConfigurationError(errors.WithStack(err))
+				return false, commonerrors.ConfigurationError(errors.WithStack(err))
 			}
 			v.SetComplex(c)
 			return true, nil
 		case nflex.Slice:
 			length, err := source.Len()
 			if err != nil {
-				return false, ConfigurationError(errors.Wrap(err, "length for array representation of complex"))
+				return false, commonerrors.ConfigurationError(errors.Wrap(err, "length for array representation of complex"))
 			}
 			if length != 2 {
-				return false, ConfigurationError(errors.New("wrong length for complex value"))
+				return false, commonerrors.ConfigurationError(errors.New("wrong length for complex value"))
 			}
 			r, err := source.GetFloat("0")
 			if err != nil {
-				return false, ConfigurationError(err)
+				return false, commonerrors.ConfigurationError(err)
 			}
 			i, err := source.GetFloat("1")
 			if err != nil {
-				return false, ConfigurationError(err)
+				return false, commonerrors.ConfigurationError(err)
 			}
 			c := complex(r, i)
 			v.SetComplex(c)
@@ -209,17 +210,17 @@ func (s FileFiller) Fill(
 		case nflex.Map:
 			r, err := source.GetFloat("real")
 			if err != nil {
-				return false, ConfigurationError(err)
+				return false, commonerrors.ConfigurationError(err)
 			}
 			i, err := source.GetFloat("imaginary")
 			if err != nil {
-				return false, ConfigurationError(err)
+				return false, commonerrors.ConfigurationError(err)
 			}
 			c := complex(r, i)
 			v.SetComplex(c)
 			return true, nil
 		default:
-			return false, ConfigurationError(errors.New("wrong type for complex value"))
+			return false, commonerrors.ConfigurationError(errors.New("wrong type for complex value"))
 		}
 	default:
 		return false, nil

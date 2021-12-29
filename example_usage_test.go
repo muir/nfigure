@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/muir/commonerrors"
 )
 
 type arguments struct {
@@ -20,7 +22,7 @@ func Example_usage() {
 	var arguments arguments
 	registry.Request(&arguments)
 	err := registry.Configure()
-	if IsUsageError(err) {
+	if commonerrors.IsUsageError(err) {
 		fmt.Println(fh.Usage())
 	}
 	// Output: Usage: program [-options args] -u email [parameters] file(s)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
@@ -27,7 +28,7 @@ type hasIsBool interface {
 func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		if fs.Parsed() {
-			return ProgrammerError(errors.New("Cannot import FlagSets that have been parsed"))
+			return commonerrors.ProgrammerError(errors.New("Cannot import FlagSets that have been parsed"))
 		}
 		var err error
 		fs.VisitAll(func(f *flag.Flag) {
@@ -46,7 +47,7 @@ func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
 			}
 			switch utf8.RuneCountInString(f.Name) {
 			case 0:
-				err = ProgrammerError(errors.New("Invalid flag in FlagSet with no Name"))
+				err = commonerrors.ProgrammerError(errors.New("Invalid flag in FlagSet with no Name"))
 			case 1:
 				h.shortFlags[f.Name] = ref
 			default:
@@ -67,7 +68,7 @@ func (h *FlagHandler) importFlags() error {
 			if ref.imported.DefValue != "" {
 				err := ref.imported.Value.Set(ref.imported.DefValue)
 				if err != nil {
-					return ProgrammerError(errors.Errorf("Cannot set default value for flag '%s': %s",
+					return commonerrors.ProgrammerError(errors.Errorf("Cannot set default value for flag '%s': %s",
 						ref.imported.Name, err))
 				}
 			}
@@ -75,7 +76,7 @@ func (h *FlagHandler) importFlags() error {
 			for _, value := range ref.values {
 				err := ref.imported.Value.Set(value)
 				if err != nil {
-					return UsageError(errors.Errorf("Cannot set value for flag '%s': %s",
+					return commonerrors.UsageError(errors.Errorf("Cannot set value for flag '%s': %s",
 						ref.imported.Name, err))
 				}
 			}
@@ -120,7 +121,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 	nonPtr := value
 	for nonPtr.Type().Kind() == reflect.Ptr {
 		if nonPtr.IsNil() {
-			return ProgrammerError(errors.New("Must provide a model or pointer to model, not nil"))
+			return commonerrors.ProgrammerError(errors.New("Must provide a model or pointer to model, not nil"))
 		}
 		nonPtr = nonPtr.Elem()
 	}
@@ -137,7 +138,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 		}
 		setter, err := reflectutils.MakeStringSetter(setterType, reflectutils.WithSplitOn(ref.Split))
 		if err != nil {
-			return UsageError(errors.Wrap(err, f.Name))
+			return commonerrors.UsageError(errors.Wrap(err, f.Name))
 		}
 		help := tagSet.Get(h.helpTag).Value
 		if help == "" {
@@ -171,7 +172,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 		}
 		switch {
 		case len(ref.Name) == 0:
-			return NFigureError(errors.New("missing name"))
+			return commonerrors.LibraryError(errors.New("missing name"))
 		case ref.isBool:
 			v := getV()
 			var defaultBool bool
@@ -179,19 +180,19 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				var err error
 				defaultBool, err = strconv.ParseBool(defaultValue.Value)
 				if err != nil {
-					return ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default bool", defaultTag))
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default bool", defaultTag))
 				}
 			}
 			fs.BoolVar(v.Addr().Interface().(*bool), ref.Name[0], defaultBool, help)
 		case ref.isMap:
 			ks, err := reflectutils.MakeStringSetter(nonPointerType.Key())
 			if err != nil {
-				return ProgrammerError(errors.Wrap(err, ref.used[0]))
+				return commonerrors.ProgrammerError(errors.Wrap(err, ref.used[0]))
 			}
 			var once bool
 			fs.Func(ref.Name[0], help, func(s string) error {
 				if s == "" {
-					return UsageError(errors.Errorf("Invalid (empty) value for -%s", ref.Name[0]))
+					return commonerrors.UsageError(errors.Errorf("Invalid (empty) value for -%s", ref.Name[0]))
 				}
 				v := getV()
 				if !once {
@@ -209,12 +210,12 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				kp := reflect.New(nonPointerType.Key())
 				err := ks(kp.Elem(), key)
 				if err != nil {
-					return UsageError(errors.Wrapf(err, "key for %s", ref.Name[0]))
+					return commonerrors.UsageError(errors.Wrapf(err, "key for %s", ref.Name[0]))
 				}
 				ep := reflect.New(nonPointerType.Elem())
 				err = setter(ep.Elem(), value)
 				if err != nil {
-					return UsageError(errors.Wrapf(err, "value for %s", ref.Name[0]))
+					return commonerrors.UsageError(errors.Wrapf(err, "value for %s", ref.Name[0]))
 				}
 				v.SetMapIndex(reflect.Indirect(kp), reflect.Indirect(ep))
 				return nil
@@ -222,7 +223,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 		case ref.isSlice:
 			setElem, err := reflectutils.MakeStringSetter(nonPointerType.Elem())
 			if err != nil {
-				return ProgrammerError(errors.Wrap(err, ref.used[0]))
+				return commonerrors.ProgrammerError(errors.Wrap(err, ref.used[0]))
 			}
 			switch nonPointerType.Kind() {
 			case reflect.Array:
@@ -236,12 +237,12 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 						values = []string{s}
 					}
 					if len(values)+index > v.Len() {
-						return UsageError(errors.Errorf("overflow array %s", ref.Name[0]))
+						return commonerrors.UsageError(errors.Errorf("overflow array %s", ref.Name[0]))
 					}
 					for i, value := range values {
 						err := setElem(v.Index(i+index), value)
 						if err != nil {
-							return UsageError(errors.Wrap(err, ref.Name[0]))
+							return commonerrors.UsageError(errors.Wrap(err, ref.Name[0]))
 						}
 					}
 					index += len(values)
@@ -261,7 +262,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 					for i, value := range values {
 						err := setElem(a.Index(i), value)
 						if err != nil {
-							return UsageError(errors.Wrap(err, ref.Name[0]))
+							return commonerrors.UsageError(errors.Wrap(err, ref.Name[0]))
 						}
 					}
 					if once {
@@ -273,13 +274,13 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 					return nil
 				})
 			default:
-				return NFigureError(errors.Errorf("internal error: not expecting %s", v.Type()))
+				return commonerrors.LibraryError(errors.Errorf("internal error: not expecting %s", v.Type()))
 			}
 
 		default:
 			fs.Func(ref.Name[0], help, func(s string) error {
 				err := setter(v, s)
-				return UsageError(errors.Wrap(err, s))
+				return commonerrors.UsageError(errors.Wrap(err, s))
 			})
 		}
 	}

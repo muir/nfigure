@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 	"go.octolab.org/pointer"
@@ -183,7 +184,7 @@ func (r *Request) fill() error {
 		var err error
 		fillers, err = fillers.Recurse(p, reflect.TypeOf(struct{}{}), reflectutils.TagSet{})
 		if err != nil {
-			return ConfigurationError(errors.Wrap(err, "request prefix "+p))
+			return commonerrors.ConfigurationError(errors.Wrap(err, "request prefix "+p))
 		}
 	}
 	_, err := fillData{
@@ -195,7 +196,7 @@ func (r *Request) fill() error {
 	if validator, ok := r.getValidator(); ok {
 		err := validator.Struct(r.object)
 		if err != nil {
-			return ValidationError(errors.Wrap(err, t.String()))
+			return commonerrors.ValidationError(errors.Wrap(err, t.String()))
 		}
 	}
 	return err
@@ -214,7 +215,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		err := tags.Get(x.r.metaTag).Fill(&meta)
 		if err != nil {
-			return false, ProgrammerError(errors.Wrap(err, f.Name))
+			return false, commonerrors.ProgrammerError(errors.Wrap(err, f.Name))
 		}
 		if meta.First == nil {
 			meta.First = pointer.ToBool(true)
@@ -378,7 +379,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		f, err := reflectutils.MakeStringSetter(reflect.PtrTo(t.Key()))
 		if err != nil {
-			return false, ProgrammerError(errors.Wrapf(err, "set key for %T", t))
+			return false, commonerrors.ProgrammerError(errors.Wrapf(err, "set key for %T", t))
 		}
 		fillers := x.fillers.Copy()
 		elemType := t.Elem()

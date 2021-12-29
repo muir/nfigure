@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/nject/nject"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
@@ -352,7 +353,7 @@ func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 	}
 	h.helpAlreadyAdded = true
 	if _, ok := h.longFlags["help"]; ok {
-		return ProgrammerError(errors.New("cannot define a 'help' flag and use FlagHelpTag()"))
+		return commonerrors.ProgrammerError(errors.New("cannot define a 'help' flag and use FlagHelpTag()"))
 	}
 	h.longFlags["help"] = &flagRef{
 		flagRefComparable: flagRefComparable{
@@ -362,7 +363,7 @@ func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 	}
 	if len(h.subcommands) > 0 {
 		if _, ok := h.subcommands["help"]; ok {
-			return ProgrammerError(errors.New("cannot define a 'help' subcommand and use FlagHelpTag()"))
+			return commonerrors.ProgrammerError(errors.New("cannot define a 'help' subcommand and use FlagHelpTag()"))
 		}
 		for key, sub := range h.subcommands {
 			if sub.helpText == nil {
@@ -397,7 +398,7 @@ func (h *FlagHandler) AddSubcommand(command string, usageSummary string, configM
 	if configModel != nil {
 		v := reflect.ValueOf(configModel)
 		if !v.IsValid() || v.IsNil() || v.Type().Kind() != reflect.Ptr || v.Type().Elem().Kind() != reflect.Struct {
-			return nil, ProgrammerError(errors.Errorf("configModel must be a nil or a non-nil pointer to a struct, not %T", configModel))
+			return nil, commonerrors.ProgrammerError(errors.Errorf("configModel must be a nil or a non-nil pointer to a struct, not %T", configModel))
 		}
 	}
 	sub := &FlagHandler{

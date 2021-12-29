@@ -3,6 +3,7 @@ package nfigure
 import (
 	"reflect"
 
+	"github.com/muir/commonerrors"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +35,7 @@ type Request struct {
 func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error {
 	v := reflect.ValueOf(model)
 	if !v.IsValid() || v.IsNil() || v.Type().Kind() != reflect.Ptr || v.Type().Elem().Kind() != reflect.Struct {
-		return ProgrammerError(errors.Errorf(
+		return commonerrors.ProgrammerError(errors.Errorf(
 			"First argument to Request must be a non-nil pointer to a struct, not %T", model))
 	}
 	req := &Request{

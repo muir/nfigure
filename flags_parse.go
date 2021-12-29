@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/muir/commonerrors"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
@@ -33,7 +34,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 		var err error
 		h.mapRE, err = regexp.Compile(`^(` + strings.Join(me, "|") + `)(.+)$`)
 		if err != nil {
-			return NFigureError(errors.Wrap(err, "unexpected internal error"))
+			return commonerrors.LibraryError(errors.Wrap(err, "unexpected internal error"))
 		}
 		debugf("parseflags mapRE = %s", h.mapRE)
 	}
@@ -48,12 +49,12 @@ func (h *FlagHandler) parseFlags(i int) error {
 			ref.used = append(ref.used, withDash)
 		case ref.isMap:
 			if i+1 >= len(os.Args) {
-				return UsageError(errors.Errorf("Expecting a positional argument after %s, none is available", inErr))
+				return commonerrors.UsageError(errors.Errorf("Expecting a positional argument after %s, none is available", inErr))
 			}
 			i++
 			kv := strings.SplitN(os.Args[i], ref.Split, 2)
 			if len(kv) != 2 {
-				return UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
+				return commonerrors.UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
 			}
 			debugf("parse map split %s = %s", kv[0], kv[1])
 			ref.keys = append(ref.keys, kv[0])
@@ -65,7 +66,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 				count = ref.explode
 			}
 			if i+count >= len(os.Args) {
-				return UsageError(errors.Errorf("Expecting %d positional arguments after %s, but only %d are available",
+				return commonerrors.UsageError(errors.Errorf("Expecting %d positional arguments after %s, but only %d are available",
 					count, inErr, len(os.Args)-i-1))
 			}
 			i++
@@ -79,7 +80,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 	handleShort := func(flag string, inErr string) error {
 		ref, ok := h.shortFlags[flag]
 		if !ok {
-			return UsageError(errors.Errorf("Flag %s not defined", inErr))
+			return commonerrors.UsageError(errors.Errorf("Flag %s not defined", inErr))
 		}
 		return handleFollowingArgs(ref, flag, "-"+flag, inErr)
 	}
@@ -91,7 +92,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			ref, ok := h.longFlags[flag]
 			if ok {
 				if ref.explode > 0 {
-					return false, UsageError(errors.Errorf(
+					return false, commonerrors.UsageError(errors.Errorf(
 						"Flag %s%s expects %d positional arguments following and cannot be used as %s%s=value",
 						dash, flag, ref.explode, dash, flag))
 				}
@@ -107,10 +108,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 						ref.used = append(ref.used, dash+m[1])
 						return true, nil
 					}
-					return false, NFigureError(errors.New("internal error: expected to find mapFlag"))
+					return false, commonerrors.LibraryError(errors.New("internal error: expected to find mapFlag"))
 				}
 			}
-			return false, UsageError(errors.Errorf("Flag %s%s not defined", dash, flag))
+			return false, commonerrors.UsageError(errors.Errorf("Flag %s%s not defined", dash, flag))
 		}
 		if ref, ok := h.longFlags[noDash]; ok {
 			return true, handleFollowingArgs(ref, noDash, dash+noDash, dash+noDash)
@@ -122,7 +123,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 				return true, nil
 			}
 		}
-		return false, UsageError(errors.Errorf("Flag %s%s not defined", dash, noDash))
+		return false, commonerrors.UsageError(errors.Errorf("Flag %s%s not defined", dash, noDash))
 	}
 
 	for ; i < len(os.Args); i++ {
@@ -244,7 +245,7 @@ func (h *FlagHandler) Fill(
 		}
 		ref, ok := (*m)[n]
 		if !ok {
-			return false, NFigureError(errors.Errorf("internal error: Could not find pre-registered flagRef for %s", n))
+			return false, commonerrors.LibraryError(errors.Errorf("internal error: Could not find pre-registered flagRef for %s", n))
 		}
 		if len(ref.values) == 0 {
 			found = true
@@ -256,7 +257,7 @@ func (h *FlagHandler) Fill(
 			split: ref.Split,
 		}]
 		if !ok {
-			return false, NFigureError(errors.Errorf("internal error: Missing setter for %s:%s", tag.Tag, n))
+			return false, commonerrors.LibraryError(errors.Errorf("internal error: Missing setter for %s:%s", tag.Tag, n))
 		}
 		if ref.IsCounter {
 			var count int
@@ -268,7 +269,7 @@ func (h *FlagHandler) Fill(
 				}
 				replacement, err := strconv.Atoi(value)
 				if err != nil {
-					return false, UsageError(errors.Wrapf(err, "value for counter, %s", ref.used[i]))
+					return false, commonerrors.UsageError(errors.Wrapf(err, "value for counter, %s", ref.used[i]))
 				}
 				count = replacement
 			}
@@ -289,7 +290,7 @@ func (h *FlagHandler) Fill(
 			m := reflect.MakeMap(t)
 			ks, err := reflectutils.MakeStringSetter(nonPointerType.Key())
 			if err != nil {
-				return false, ProgrammerError(errors.Wrap(err, ref.used[0]))
+				return false, commonerrors.ProgrammerError(errors.Wrap(err, ref.used[0]))
 			}
 			es := setter
 			for i, value := range ref.values {
@@ -298,12 +299,12 @@ func (h *FlagHandler) Fill(
 				kp := reflect.New(nonPointerType.Key())
 				err := ks(kp.Elem(), key)
 				if err != nil {
-					return false, UsageError(errors.Wrapf(err, "key for %s", ref.used[i]))
+					return false, commonerrors.UsageError(errors.Wrapf(err, "key for %s", ref.used[i]))
 				}
 				ep := reflect.New(nonPointerType.Elem())
 				err = es(ep.Elem(), value)
 				if err != nil {
-					return false, UsageError(errors.Wrapf(err, "value for %s", ref.used[i]))
+					return false, commonerrors.UsageError(errors.Wrapf(err, "value for %s", ref.used[i]))
 				}
 				m.SetMapIndex(reflect.Indirect(kp), reflect.Indirect(ep))
 			}
@@ -316,7 +317,7 @@ func (h *FlagHandler) Fill(
 			}
 			setElem, err := reflectutils.MakeStringSetter(nonPointerType.Elem())
 			if err != nil {
-				return false, ProgrammerError(errors.Wrap(err, ref.used[0]))
+				return false, commonerrors.ProgrammerError(errors.Wrap(err, ref.used[0]))
 			}
 			var a reflect.Value
 			switch nonPointerType.Kind() {
@@ -329,26 +330,26 @@ func (h *FlagHandler) Fill(
 				a = reflect.MakeSlice(nonPointerType, len(ref.values), len(ref.values))
 				v.Set(a)
 			default:
-				return false, NFigureError(errors.Errorf("internal error: not expecting %s", t))
+				return false, commonerrors.LibraryError(errors.Errorf("internal error: not expecting %s", t))
 			}
 			for i, value := range ref.values {
 				err := setElem(a.Index(i), value)
 				if err != nil {
-					return false, UsageError(errors.Wrap(err, ref.used[i]))
+					return false, commonerrors.UsageError(errors.Wrap(err, ref.used[i]))
 				}
 			}
 			return true, nil
 		}
 		err := setter(v, ref.values[len(ref.values)-1])
 		if err != nil {
-			return false, UsageError(errors.Wrap(err, ref.used[len(ref.values)-1]))
+			return false, commonerrors.UsageError(errors.Wrap(err, ref.used[len(ref.values)-1]))
 		}
 		return true, nil
 	}
 	if found {
 		return false, nil
 	}
-	return false, NFigureError(errors.New("missing prewalk"))
+	return false, commonerrors.LibraryError(errors.New("missing prewalk"))
 }
 
 func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, reflect.Type, error) {
@@ -395,7 +396,7 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 		case reflect.Array:
 			ref.explode = nonPointerType.Len()
 		default:
-			return ref, nil, nil, ProgrammerError(errors.New("split=explode tag is for slice, array types only"))
+			return ref, nil, nil, commonerrors.ProgrammerError(errors.New("split=explode tag is for slice, array types only"))
 		}
 	}
 	return ref, setterType, nonPointerType, err
@@ -424,19 +425,19 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 		h.rawData = append(h.rawData, f)
 		if ref.isMap {
 			if ref.Split != "=" && ref.Map == "prefix" {
-				walkErr = ProgrammerError(errors.New("map=prefix requires split=equals"))
+				walkErr = commonerrors.ProgrammerError(errors.New("map=prefix requires split=equals"))
 				return false
 			}
 			switch ref.Map {
 			case "explode", "prefix":
 			default:
-				walkErr = ProgrammerError(errors.Errorf("map=%s not defined, map=explode|prefix", ref.Map))
+				walkErr = commonerrors.ProgrammerError(errors.Errorf("map=%s not defined, map=explode|prefix", ref.Map))
 			}
 		}
 		debugf("PreWalk make setter %s was %s", setterType, f.Type)
 		setter, err := reflectutils.MakeStringSetter(setterType, reflectutils.WithSplitOn(ref.Split))
 		if err != nil {
-			walkErr = UsageError(errors.Wrap(err, f.Name))
+			walkErr = commonerrors.UsageError(errors.Wrap(err, f.Name))
 			return true
 		}
 		for _, n := range ref.Name {
@@ -464,7 +465,7 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 				// hmm, this flag is defined more than once!
 				debugf("prewalk existing flag regsitration")
 				if existing.flagTagComparable != ref.flagTagComparable || existing.flagRefComparable != ref.flagRefComparable {
-					walkErr = ProgrammerError(errors.Errorf("multiple registrations of %s:%s are not compatible with each other: %s/%s/%s vs %s/%s/%s",
+					walkErr = commonerrors.ProgrammerError(errors.Errorf("multiple registrations of %s:%s are not compatible with each other: %s/%s/%s vs %s/%s/%s",
 						tagName, n,
 						existing.fieldName, existing.typ, existing.tagValue,
 						ref.fieldName, ref.typ, ref.tagValue,

@@ -25,10 +25,6 @@ split deindent out to its own package
 
 test double-level nested structs
 
-best practices for library writers
-
-provide a way to map from types to handlers and support time.Duration with it
-
 move error types to their own package (except NfigureError)
 
 rewrites and loops as layer over nflex
