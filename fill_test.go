@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/muir/nfigure/nflex"
+	"github.com/muir/nflex"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

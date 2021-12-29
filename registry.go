@@ -3,7 +3,7 @@ package nfigure
 import (
 	"sync"
 
-	"github.com/muir/nfigure/nflex"
+	"github.com/muir/nflex"
 	"github.com/pkg/errors"
 )
 

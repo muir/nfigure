@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/muir/commonerrors"
-	"github.com/muir/nfigure/nflex"
+	"github.com/muir/nflex"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )

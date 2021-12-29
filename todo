@@ -25,6 +25,4 @@ split deindent out to its own package
 
 test double-level nested structs
 
-move error types to their own package (except NfigureError)
-
 rewrites and loops as layer over nflex
