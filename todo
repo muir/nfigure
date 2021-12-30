@@ -7,8 +7,6 @@ fields later in the struct?
 
 Handle INI files: https://pkg.go.dev/github.com/go-ini/ini#pkg-overview
 
-put nflex in its own package
-
 nflex: .ini & .xml -- a wrapper for general unmarshal
 
 global registry
@@ -26,3 +24,4 @@ split deindent out to its own package
 test double-level nested structs
 
 rewrites and loops as layer over nflex
+

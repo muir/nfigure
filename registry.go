@@ -141,25 +141,26 @@ func (r *Registry) ConfigFile(path string, prefix ...string) error {
 	debugf("fillers %+v", r.fillers)
 	var okay bool
 	for _, tag := range r.fillers.Order() {
-		debugf("read configfile? %s", tag)
 		filler := r.fillers.m[tag]
 		canAdd, ok := filler.(CanAddConfigFileFiller)
 		if !ok {
-			debugf("can't add config file %s", tag)
+			debugf("filler %s does not support config files", tag)
 			continue
 		}
 		n, err := canAdd.AddConfigFile(path, prefix)
 		if err != nil {
 			if nflex.IsUnknownFileTypeError(err) {
+				debugf("filler %s rejected config file %s: %s", tag, path, err)
 				rejected = err
 				continue
 			}
 			return errors.Wrap(err, tag)
 		}
 		if n == nil {
-			// We do not remove tag from fillers
+			debugf("filler %s added config file %s and remains the same", tag, path)
 			continue
 		}
+		debugf("filler %s added config file %s and replaces itself", tag, path)
 		r.fillers.Add(tag, n)
 		okay = true
 	}
@@ -188,6 +189,7 @@ type ConfigureReactive interface {
 // only be used for configuration that has not already happened.
 func (r *Registry) Configure() error {
 	r.configureStarted = true
+	debugf("registry: %d requests", r.lenRequests())
 	for i := 0; i < r.lenRequests(); i++ {
 		request := r.getRequest(i)
 		err := r.preWalk(request)
@@ -250,12 +252,14 @@ func (r *Registry) preWalkLocked(request *Request) error {
 	for _, tag := range fillers.Order() {
 		filler, ok := fillers.m[tag].(CanPreWalkFiller)
 		if !ok {
+			debugf("filler %s cannot PreWalk", tag)
 			continue
 		}
 		err := filler.PreWalk(tag, request.object)
 		if err != nil {
 			return errors.Wrap(err, tag)
 		}
+		debugf("filler %s completed PreWalk", tag)
 	}
 	return nil
 }

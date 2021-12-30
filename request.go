@@ -52,10 +52,13 @@ func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error 
 	defer r.lock.Unlock()
 	r.requests = append(r.requests, req)
 	if r.configureStarted {
+		debug("request: prewalking since configuration has already started")
 		err := r.preWalkLocked(req)
 		if err != nil {
 			return err
 		}
+	} else {
+		debug("request: not prewalking")
 	}
 	return nil
 }

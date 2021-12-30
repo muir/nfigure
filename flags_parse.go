@@ -410,8 +410,9 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 	v := reflect.ValueOf(model)
 	var walkErr error
+	debug("flags: beging PreWalk")
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
-		debugf("prewalk %s %s %s", f.Name, f.Type, f.Tag)
+		debugf("flags: walk %s %s %s", f.Name, f.Type, f.Tag)
 		tag := reflectutils.SplitTag(f.Tag).Set().Get(tagName)
 		if tag.Tag == "" {
 			return true
