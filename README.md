@@ -17,6 +17,7 @@ Nfigure is a reflective configuration library.  It supports:
 - Configuration from: environment variables
 - Configuration from: the command line
 - Posix-style and Go-style command line parsing
+- Support for subcommands when parsing command lines
 - Multi-stage binding to allow independently-developed libraries to express their configruration needs ahead of program startup
 - Custom type support using [reflectutils.RegisterStringSetter()](https://pkg.go.dev/github.com/muir/reflectutils#RegisterStringSetter).
 - Filling all normal Go types, array, slices, maps, and time.Duration
