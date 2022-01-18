@@ -1,7 +1,5 @@
 # nfigure - per-library configuration
 
-# incomplete work-in-progress, not ready to be used
-
 [![GoDoc](https://godoc.org/github.com/muir/nfigure?status.png)](https://pkg.go.dev/github.com/muir/nfigure)
 ![unit tests](https://github.com/muir/nfigure/actions/workflows/go.yml/badge.svg)
 [![report card](https://goreportcard.com/badge/github.com/muir/nfigure)](https://goreportcard.com/report/github.com/muir/nfigure)
@@ -12,21 +10,30 @@ Install:
 
 ---
 
-Nfigure is a configuration library with the property that the set of things
-to be configured can be assembled during startup.  This allows independently-developed
-libraries to express their configuration needs.
+Nfigure is a reflective configuration library.  It supports:
 
-Configuration request details are expressed with struct tags.
+- Describing what to configure using struct tags
+- Configuration from: multiple configuration file formats, and multiple files
+- Configuration from: environment variables
+- Configuration from: the command line
+- Posix-style and Go-style command line parsing
+- Multi-stage binding to allow independently-developed libraries to express their configruration needs ahead of program startup
+- Custom type support using [reflectutils.RegisterStringSetter()](https://pkg.go.dev/github.com/muir/reflectutils#RegisterStringSetter).
+- Filling all normal Go types, array, slices, maps, and time.Duration
 
-Nfigure natively supports configuration via files, environment variables, and command line flags.
+While nfigure has lots of flexibility and many features, using it should be simple.
 
-## In a library, in-house or published for others to use
+## Example: In a library, in-house or published for others to use
+
+It can pre-register configuration at the library level, before program startup.  This allows
+library-specific configuration to be handled at the library-level rather than pushed to 
+a central main.
 
 ```go
 type myLibraryConfig struct {
-	Field1	string	  `env="FIELD1" flag:"field1" default:"f1" describe:"Field1 controls the first field"`
-	Field2	int	  `nfigure:mylibrary.field2` 
-	Field3	[]string  `flag:field3`
+	Field1	string	  `env="FIELD1" flag:"field1" default:"f1" help:"Field1 controls the first field"`
+	Field2	int	  `config:"mylibrary.field2"` 
+	Field3	[]string  `flag:"field3"`
 }
 
 type MyLibrary btruct {
@@ -42,17 +49,18 @@ func createMyLibrary(nreg *nfigure.Registry) *MyLibrary {
 	return &lib
 }
 
-## At the program level
+## Example: At the program level
 
-This is an example using nserve.  Where this gets interesting is if multiple
+This is an example using [nserve](https://github.com/muir/nject/tree/main/nserve).
+Where this gets interesting is if multiple
 binaries are built from the same source, the set of libraires can exist in a
 list and only the ones that are needed for particular executables will have their
 configuration evaluated.
 
-```
+```go
 type programLevelConfig struct {
 	Field1	string `env="field1" default:"F1"`
-	Field4	float64	`flag:"field4" default:"F4" describe:
+	Field4	float64	`flag:"field4" default:"3.9"`
 }
 
 func createMyApp(myLibrary *mylibrary.MyLibrary, nreg *nfigure.Registery) error {
@@ -72,10 +80,16 @@ func main() {
 }
 ```
 
-## Common tags
+## Supported tags
 
-- `default:"value"` specifies a default value, applies to other data suppliers too.
-- `help:"a help message describing the flag, does not need to reference the name"`
+Assuming a command line parser was bound, the follwing tags are supported:
+
+- `nfigure`: the meta tag, used to control filler interactions
+- `default`: a filler that provides a literal value
+- `env`: fill values from environment variables
+- `config`: fill values from configuration files
+- `flag`: fill values from the command line (Go style or Posix style)
+- `help`: per-item help text for command line Usage
 
 ## Environment variables
 
@@ -83,43 +97,23 @@ Usage:
 
 - `env:"VARNAME"` specifies that a value can or should be loaded from an environment variable
 
-## Flag setup
+## Command line parsing
 
-#### There are many diferent flavors of flags in use.  
-
-	-verbose 3
-	-verbose=3
-	--verbose 3
-	--verbose=3
-	-v 3
-	-v -v -v
-	-vvv 
-	v
-
-
-#### How do you combine them?
-
-	--debug=true
-	-d 
-	--verbose=3
-	-v
-
-	-vd 3 true
-	vd 3 true
-
-### Usage
+Both Go-style and Posix-style command line parsing is supported.  In addition to the
+base features, counters are supported.  Filling maps, arrays, and slices is supported.
 
 - `flag:"name"` specifies the name of the command line flag to fill a value.
 - `flag:"name n"` specifies a single letter alternative
 - `flag:"name,split=comma` for array values, specifies that strings will be split on comma, flag can only be given once
 - `flag:"name,explode=true` for array values, specifies that the flag can be given multiple times and is not split
-- `flag:"name,content=application/json` specifies that the value is JSON that should be decoded
-- `flag:"name,counter=true` for integer values, counts the number of times the flag is used, flag cannot take argument
+- `flag:"name,counter` for numberic values, counts the number of times the flag is used, flag cannot take argument
+- `flag:"name,map=explode,split=equal` for maps, support -name a=b -name b=c
+- `flag:"name,map=prefix` for maps, support --namex=a --nameb=c
 
-### Default behavior
+### Posix-style
 
-The default behavior is that single-letter are used after a single dash and may be combined.  Multi-letter
-flags require a two-dash prefix.
+When using Posix-style flags (`PosixFlagHandler()`), flags whose names are only a single rune
+can be combined on the command line:
 
 	--debug 
 	-d
@@ -129,7 +123,7 @@ flags require a two-dash prefix.
 
 For boolean values, negation is "--no-":
 
-	-no-verbose
+	--no-verbose
 
 ## Best Practices
 

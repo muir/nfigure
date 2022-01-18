@@ -194,7 +194,7 @@ func PosixFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 
 // GoFlagHandler creates and configures a flaghandler that mirrors Go's native
 // "flag" package in behavior.  Long-form flags can have a single dash or double
-// dashes (-flag vs --flag).
+// dashes (-flag and --flag).
 //
 // Assignment or positional args are both supported -flag=value and -flag value.
 //
@@ -335,10 +335,11 @@ func WithDefaultsTag(defaultTag string) FlaghandlerOptArg {
 // per-flag help summaries.  For example, you may want:
 //
 //	type MyConfig struct {
-//		User string `flag:"u" help:"Email address"`
+//		User string `flag:"u,argName=email" help:"Set email address"`
 //	}
 //
-// The default is "help"
+// The default is "help".  To just change how the flag arguments are displayed
+// use "argName" in the "flag" tag.
 func FlagHelpTag(helpTagName string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.helpTag = helpTagName

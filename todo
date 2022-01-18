@@ -31,3 +31,5 @@ support Keys for flags (also needs Recurse?)
 
 support struct filling for flags with prefix as Recurse
 
+support "content=application/json" for flags/environment variables
+

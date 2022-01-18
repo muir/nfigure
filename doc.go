@@ -39,7 +39,7 @@ controls if a sub-struct should be descended into.
 
 By default, no command-line parser is included.
 
-The general form for the tag parameters for handlers and the meta control is 
+The general form for the tag parameters for handlers and the meta control is
 tag:"name,key=value,flag,!flag".
 
 The name parameter, which is always first, specifies the name to match on.  This overrides
@@ -85,6 +85,10 @@ Each filler defines it's own parameters.  Here's a summary:
 	counter: is this a numeric counter (eg: foo -v -v -v)
 	required: is this a required flag
 	argName: how to describe parameters for this in the usage message
+
+Ultimately setting variables based on string values is done by
+https://pkg.go.dev/github.com/muir/reflectutils#MakeStringSetter  See the documentation there
+for support for customer types.
 
 Known bugs / limitations:
 
