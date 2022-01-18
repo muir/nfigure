@@ -1,4 +1,5 @@
 //go:build debugNfigure
+// +build debugNfigure
 
 package nfigure
 
