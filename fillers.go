@@ -94,9 +94,9 @@ func (f *fillerCollection) Clean() {
 }
 
 type fillPair struct {
-	Filler Filler
-	Tag    reflectutils.Tag
-	Backup string // because Tag.Tag may be empty
+	ForcedTag string // because Tag.Tag may be empty
+	Tag       reflectutils.Tag
+	Filler    Filler
 }
 
 func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []fillPair {
@@ -107,9 +107,9 @@ func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []
 		if filler, ok := f.m[tag.Tag]; ok {
 			debug("fillers: creating pairs, found filler for tag", tag.Tag)
 			pairs = append(pairs, fillPair{
-				Filler: filler,
-				Tag:    tag,
-				Backup: tag.Tag,
+				Filler:    filler,
+				Tag:       tag,
+				ForcedTag: tag.Tag,
 			})
 			done[tag.Tag] = struct{}{}
 		} else {
@@ -136,8 +136,8 @@ func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []
 		}
 		debug("fillers: creating pairs, found backup", tag)
 		pairs = append(pairs, fillPair{
-			Filler: filler,
-			Backup: tag,
+			Filler:    filler,
+			ForcedTag: tag,
 		})
 	}
 	return pairs

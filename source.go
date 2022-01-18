@@ -67,32 +67,17 @@ type fileTag struct {
 }
 
 // Recurse is part of the CanRecurseFiller contract and is called by registry.Configure()
-func (s FileFiller) Recurse(name string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
+func (s FileFiller) Recurse(name string) (Filler, error) {
 	if s.source == nil {
-		debug("source: recurse -> no filler(nil)", name, "from", callers(4))
+		debug("source: recurse", name, "-> no filler(nil) from", callers(4))
 		return nil, nil
-	}
-	if tag.Tag != "" {
-		var fileTag fileTag
-		err := tag.Fill(&fileTag)
-		if err != nil {
-			return nil, commonerrors.ProgrammerError(errors.Wrap(err, tag.Tag))
-		}
-		switch fileTag.Name {
-		case "-":
-			return nil, nil
-		case "":
-			//
-		default:
-			name = fileTag.Name
-		}
 	}
 	source := s.source.Recurse(name)
 	if source == nil {
-		debug("source: recurse -> does not exist(nil)", name, "from", callers(4))
+		debug("source: recurse", name, "-> does not exist(nil) from", callers(4))
 		return nil, nil
 	}
-	debug("source: recurse using", name, "from", callers(4))
+	debug("source: recurse", name, "from", callers(4))
 	return FileFiller{
 		source:          nflex.NewMultiSource(source),
 		umarshalOptions: s.umarshalOptions,
@@ -120,7 +105,9 @@ func (s FileFiller) Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, c
 	if err != nil {
 		return 0, false
 	}
-	return length, source.Exists()
+	exists := source.Exists()
+	debugf("source: Len %s %v/%v: %d, %v\n", tag, firstFirst, combineObjects, length, exists)
+	return length, exists
 }
 
 // Fill is part of the Filler contract and is called by registry.Configure()

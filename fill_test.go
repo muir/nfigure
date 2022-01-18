@@ -21,14 +21,33 @@ type testDataA struct {
 	NNx struct {
 		PP string
 	} `nf:"NN"`
+	QQ []string `nf:"QQ" n2:"RR" n3:"-" meta:",combine"`
 }
 
 var mixedCases = []struct {
-	base    interface{}
-	want    interface{}
-	cmd     string
-	fillers string
+	base      interface{}
+	want      interface{}
+	cmd       string
+	fillers   string
+	remaining string
 }{
+	{
+		cmd:  "empty",
+		base: &testDataA{},
+		want: &testDataA{
+			II: 30, // from source2.yaml (last)
+			JJ: 12, // from source.yaml (first)
+			MM: struct{ OO string }{
+				OO: "source.yaml",
+			},
+			NNx: struct{ PP string }{
+				PP: "s.y",
+			},
+			QQ: []string{"a", "b", "c", "d", "e", "f"},
+		},
+		fillers:   "config flag nf meta nfigure noenv",
+		remaining: "empty",
+	},
 	{
 		cmd:  "--GG 13 --HH 14",
 		base: &testDataA{},
@@ -43,8 +62,27 @@ var mixedCases = []struct {
 			NNx: struct{ PP string }{
 				PP: "s.y",
 			},
+			QQ: []string{"a", "b", "c", "d", "e", "f"},
 		},
 		fillers: "config flag nf meta nfigure",
+	},
+	{
+		cmd:  "combine qq",
+		base: &testDataA{},
+		want: &testDataA{
+			II: 30, // from source2.yaml (last)
+			JJ: 12, // from source.yaml (first)
+			MM: struct{ OO string }{
+				OO: "source.yaml",
+			},
+			NNx: struct{ PP string }{
+				PP: "s.y",
+			},
+			// n2 uses RR and that gets the extra letters
+			QQ: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"},
+		},
+		fillers:   "config flag nf n2 meta nfigure noenv",
+		remaining: "combine qq",
 	},
 }
 
@@ -58,7 +96,11 @@ func TestMetaFirstScalar(t *testing.T) {
 			os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
 			var called int
 			fh := PosixFlagHandler(OnStart(func(args []string) {
-				assert.Equal(t, ([]string)(nil), args, "remaining args")
+				if tc.remaining == "" {
+					assert.Equal(t, ([]string)(nil), args, "remaining args")
+				} else {
+					assert.Equal(t, strings.Split(tc.remaining, " "), args, "remaining args")
+				}
 				called++
 			}))
 			potentialArgs := map[string]RegistryFuncArg{
@@ -67,6 +109,9 @@ func TestMetaFirstScalar(t *testing.T) {
 				"nf":      WithFiller("nf", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 				"meta":    WithMetaTag("meta"),
 				"nfigure": WithFiller("nfigure", nil),
+				"n2":      WithFiller("n2", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
+				"n3":      WithFiller("n3", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
+				"noenv":   WithFiller("env", nil),
 			}
 			var args []RegistryFuncArg
 			for _, n := range strings.Split(tc.fillers, " ") {

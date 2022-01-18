@@ -30,7 +30,7 @@ type CanRecurseFiller interface {
 	// If the filler knows that with the recursion it will no longer
 	// try to fill anything, it can return nil for it's replacment
 	// filler.
-	Recurse(structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error)
+	Recurse(name string) (Filler, error)
 }
 
 type CanLenFiller interface {
@@ -96,14 +96,14 @@ type metaFields struct {
 // tag would be really difficult.
 func (f *fillerCollection) Len(
 	t reflect.Type,
-	tagSet reflectutils.TagSet,
-	meta metaFields,
+	x fillData,
 ) (int, func() (*fillerCollection, error)) {
 	var total int
-	pairs := f.pairs(tagSet, meta)
+	pairs := f.pairs(x.tags, x.meta)
+	debugf("fill: Len: %s pairs: %+v", x.name, pairs)
 	lengths := make([]int, len(pairs))
-	combine := pointer.ValueOfBool(meta.Combine)
-	first := pointer.ValueOfBool(meta.First)
+	combine := pointer.ValueOfBool(x.meta.Combine)
+	first := pointer.ValueOfBool(x.meta.First)
 	for i, fp := range pairs {
 		canLen, ok := fp.Filler.(CanLenFiller)
 		if !ok {
@@ -113,6 +113,7 @@ func (f *fillerCollection) Len(
 		if !ok {
 			continue
 		}
+		debugf("fill: Len: filler %s: %d for %s", fp.ForcedTag, length, x.name)
 		lengths[i] = length
 		total += length
 		if !combine {
@@ -120,20 +121,20 @@ func (f *fillerCollection) Len(
 		}
 	}
 	var index int
-	var done int
+	var done int // resets to zero for each filler
+	debugf("fill: Len: total for %s (%s) is %d (%d pairs)", x.name, t, total, len(pairs))
 	return total, func() (*fillerCollection, error) {
 		for lengths[index] == 0 {
 			index++
 		}
-		tag := pairs[index].Tag
-		key := pairs[index].Backup
-		debug("fill: recurse single filler for len", tag, t)
-		filler, err := recurseFiller(pairs[index].Filler, strconv.Itoa(done), t, tag)
+		key := pairs[index].ForcedTag
+		debugf("fill: Len: recurse %s filler %s (%s), %d:%d/%d items", key, x.name, t, index, done, lengths[index])
+		filler, err := simpleRecurseFiller(pairs[index].Filler, strconv.Itoa(done))
 		if err != nil {
 			return nil, err
 		}
 		done++
-		if done > lengths[index] {
+		if done >= lengths[index] {
 			index++
 			done = 0
 		}
@@ -230,7 +231,7 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 			tags:    tags,
 			meta:    meta,
 			fillers: x.fillers,
-		}.fillField(f.Type, v.FieldByIndex(f.Index))
+		}.recurseFillField(f.Type, v.FieldByIndex(f.Index))
 		if filled {
 			anyFilled = true
 		}
@@ -243,19 +244,20 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 
 func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
 	fillers = fillers.Copy()
-	for tag, filler := range fillers.m {
-		debug("fill: Recurse", name, t, tag)
-		f, err := recurseFiller(filler, name, t, tagSet.Get(tag))
+	for tagName, filler := range fillers.m {
+		tag := tagSet.Get(tagName)
+		f, err := recurseFiller(filler, name, tag)
+		debug("fill: Recurse", name, t, tagName, tag)
 		if err != nil {
-			return nil, errors.Wrap(err, tag)
+			return nil, errors.Wrap(err, tagName)
 		}
-		fillers.Add(tag, f)
+		fillers.Add(tagName, f)
 	}
 	return fillers, nil
 }
 
-func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
-	debug("fill: fillField", x.name, x.meta.Name, t)
+func (x fillData) recurseFillField(t reflect.Type, v reflect.Value) (bool, error) {
+	debug("fill: recurseFillField", x.name, x.meta.Name, t)
 	switch x.meta.Name {
 	case "-":
 		return false, nil
@@ -272,6 +274,11 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return x.fillField(t, v)
+}
+
+func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
+	debug("fill: fillField", x.name, x.meta.Name, t)
 
 	var isStructural bool
 	switch reflectutils.NonPointer(t).Kind() {
@@ -319,7 +326,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		v.Set(e)
 		return true, nil
 	case reflect.Array:
-		count, recurseInSequence := x.fillers.Len(t, x.tags, x.meta)
+		count, recurseInSequence := x.fillers.Len(t, x)
 		cap := v.Len()
 		elemType := t.Elem()
 		for i := 0; i < count && i < cap; i++ {
@@ -338,7 +345,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		}
 		return anyFilled, nil
 	case reflect.Slice:
-		count, recurseInSequence := x.fillers.Len(t, x.tags, x.meta)
+		count, recurseInSequence := x.fillers.Len(t, x)
 		if count == 0 {
 			return false, nil
 		}
@@ -351,6 +358,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 			if err != nil {
 				return false, err
 			}
+			debugf("fill slice element %d, name = %s\n", i, x.name)
 			filled, err := x.fillField(elemType, a.Index(i))
 			if err != nil {
 				return false, err
@@ -410,9 +418,34 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	}
 }
 
-func recurseFiller(filler Filler, structName string, t reflect.Type, tag reflectutils.Tag) (Filler, error) {
+func recurseFiller(filler Filler, name string, tag reflectutils.Tag) (Filler, error) {
 	if canRecurse, ok := filler.(CanRecurseFiller); ok {
-		return canRecurse.Recurse(structName, t, tag)
+		if tag.Tag != "" {
+			var fileTag fileTag
+			err := tag.Fill(&fileTag)
+			if err != nil {
+				return nil, commonerrors.ProgrammerError(errors.Wrap(err, tag.Tag))
+			}
+			switch fileTag.Name {
+			case "-":
+				return nil, nil
+				debug("fill recurseFiller w/", tag.Tag, ": skip")
+			case "":
+				//
+				debug("fill recurseFiller w/", tag.Tag, ": keep", name)
+			default:
+				debug("fill recurseFiller w/", tag.Tag, ": use", fileTag.Name, "instead of", name)
+				name = fileTag.Name
+			}
+		}
+		return canRecurse.Recurse(name)
+	}
+	return filler, nil
+}
+
+func simpleRecurseFiller(filler Filler, name string) (Filler, error) {
+	if canRecurse, ok := filler.(CanRecurseFiller); ok {
+		return canRecurse.Recurse(name)
 	}
 	return filler, nil
 }
