@@ -21,6 +21,7 @@ type Filler interface {
 	Fill(t reflect.Type, v reflect.Value, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (filledAnything bool, err error)
 }
 
+// CanRecurseFiller indicates that Recurse() is supported
 type CanRecurseFiller interface {
 	Filler
 	// Recurse is called during the filling process to indicate
@@ -33,18 +34,21 @@ type CanRecurseFiller interface {
 	Recurse(name string) (Filler, error)
 }
 
+// CanLenFiller indicates that Len() is supported
 type CanLenFiller interface {
 	Filler
 	// for filling arrays & slices
 	Len(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) (int, bool)
 }
 
+// CanKeysFiller indicates that Keys() is supported
 type CanKeysFiller interface {
 	Filler
 	// for filling maps
 	Keys(t reflect.Type, tag reflectutils.Tag, firstFirst bool, combineObjects bool) ([]string, bool)
 }
 
+// CanPreWalkFiller indicates the PreWalk is supported
 type CanPreWalkFiller interface {
 	Filler
 	// PreWalk is called from nfigure.Request only on every known (at that time) configuration
@@ -52,6 +56,7 @@ type CanPreWalkFiller interface {
 	PreWalk(tagName string, model interface{}) error
 }
 
+// CanConfigureCompleteFiller indicates that ConfigureComplete is supported
 type CanConfigureCompleteFiller interface {
 	Filler
 	// ConfigureComplete is called by Registry.Configure() when all configuration is complete.
@@ -59,12 +64,14 @@ type CanConfigureCompleteFiller interface {
 	ConfigureComplete() error
 }
 
+// CanPreConfigureFiller indicates that PreConfigure is supported
 type CanPreConfigureFiller interface {
 	Filler
 	// PreConfigure is called by nfigure.Registry once just before configuration starts
 	PreConfigure(tagName string, request *Registry) error
 }
 
+// CanAddConfigFileFiller indicates AddConfigFile is supported
 type CanAddConfigFileFiller interface {
 	Filler
 	// If the file type is not supported by this filler, then
@@ -242,18 +249,18 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	return anyFilled, nil
 }
 
-func (fillers *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
-	fillers = fillers.Copy()
-	for tagName, filler := range fillers.m {
+func (f *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
+	f = f.Copy()
+	for tagName, filler := range f.m {
 		tag := tagSet.Get(tagName)
-		f, err := recurseFiller(filler, name, tag)
+		recursed, err := recurseFiller(filler, name, tag)
 		debug("fill: Recurse", name, t, tagName, tag)
 		if err != nil {
 			return nil, errors.Wrap(err, tagName)
 		}
-		fillers.Add(tagName, f)
+		f.Add(tagName, recursed)
 	}
-	return fillers, nil
+	return f, nil
 }
 
 func (x fillData) recurseFillField(t reflect.Type, v reflect.Value) (bool, error) {

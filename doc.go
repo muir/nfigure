@@ -59,7 +59,7 @@ Boolean parameters can be specified after the name.  The following all mean fals
 	flag=0
 	flag=n
 
-Likewise, "flag,flag=true,flag=1,flag=y" is highly redundent, setting flag to be true
+Likewise, "flag,flag=true,flag=1,flag=y" is highly redundant, setting flag to be true
 four times.
 
 Each filler defines it's own parameters.  Here's a summary:

@@ -21,8 +21,11 @@ var _ CanLenFiller = FileFiller{}
 var _ CanKeysFiller = FileFiller{}
 var _ CanAddConfigFileFiller = FileFiller{}
 
+// FileFillerOpts is a functional arugment for NewFileFiller()
 type FileFillerOpts func(*FileFiller)
 
+// WithUnmarshalOpts passes through to
+// https://pkg.go.dev/github.com/muir/nflex#UnmarshalFile
 func WithUnmarshalOpts(opts ...nflex.UnmarshalFileArg) FileFillerOpts {
 	return func(s *FileFiller) {
 		s.umarshalOptions = opts

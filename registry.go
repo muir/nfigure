@@ -57,6 +57,8 @@ func WithFiller(tag string, filler Filler) RegistryFuncArg {
 	}
 }
 
+// WithoutFillers drops all of the fillers that have been registered
+// so far, including the default ones.
 func WithoutFillers() RegistryFuncArg {
 	return func(r *registryConfig) {
 		r.fillers = newFillerCollection()
@@ -73,12 +75,14 @@ func WithValidate(v Validate) RegistryFuncArg {
 	}
 }
 
+// WithMetaTag specifies the name of the meta tag.
+//
+// The default meta tag is "nfigure".
+//
 // Meta-level controls in struct tags can control the name
 // for recursion (over-ridden by filler-level tags) and
 // the behavior for when multiple fillers can potentially
 // provide values.
-//
-// The default meta tag is "nfigure".
 //
 // The first meta tag value is positional and is the name used
 // for recursion or "-" to indicate that no filling should happen.
@@ -87,7 +91,7 @@ func WithValidate(v Validate) RegistryFuncArg {
 // succeeds in filling anything.  This is the default.
 //
 // If "last" is true then filling starts with the last filler and
-// stops when a filler suceeds
+// stops when a filler succeeds
 //
 // If "desc" is false then filling doesn't descend into the keys,
 // elements, values of something that has been filled at a higher

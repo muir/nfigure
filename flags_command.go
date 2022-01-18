@@ -24,7 +24,7 @@ import (
 // 4. Fill()
 // 5. ConfigureComplete()
 
-// Flaghandler is the common type for both PosixFlagHanlder() and GoFlagHandler().
+// FlagHandler is the common type for both PosixFlagHanlder() and GoFlagHandler().
 // The set of flags are found in struct tags, by default with the "flag" prefix.
 //
 //	type MyFlags struct {
@@ -157,7 +157,7 @@ type setterKey struct {
 var _ Filler = &FlagHandler{}
 
 // PosixFlagHandler creates and configures a flaghandler that
-// requires long options to be preceeded with a double-dash
+// requires long options to be preceded with a double-dash
 // and will combine short flags together.
 //
 // Long-form booleans can be set to false with a "no-" prefix.
@@ -743,9 +743,8 @@ func getCategory(name string, ref flagRef) optCategory {
 	case 1:
 		if ref.isBool {
 			return flagOpt
-		} else {
-			return optionOpt
 		}
+		return optionOpt
 	default:
 		return parameterOpt
 	}

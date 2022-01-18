@@ -7,6 +7,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// RequestFuncArg is type functional argument type used by
+// Registry.Request().
 type RequestFuncArg func(*Request)
 
 // FromRoot is intened for use when creating a Request
@@ -63,6 +65,7 @@ func (r *Registry) Request(model interface{}, options ...RegistryFuncArg) error 
 	return nil
 }
 
+// Registry is a getter: it returns the Registry that the Request is bound to.
 func (r *Request) Registry() *Registry {
 	return r.registry
 }

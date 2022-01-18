@@ -39,7 +39,7 @@ func NewEnvFiller(opts ...LookupFillerOpt) Filler {
 			opts...)...)
 }
 
-// NewDefaultFiller creates a LookupFiller that simpley fills in the value provided
+// NewDefaultFiller creates a LookupFiller that simply fills in the value provided
 // into the variable.  Comma (",") is not allowed in the values because that is used
 // to introduce options common to LookupFiller.
 //

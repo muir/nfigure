@@ -15,7 +15,7 @@ import (
 )
 
 func (h *FlagHandler) parseFlags(i int) error {
-	debug("flags: begininng parse")
+	debug("flags: beginning parse")
 	if h.alreadyParsed {
 		h.clearParse()
 	}
