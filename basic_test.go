@@ -27,7 +27,7 @@ func TestBasicFile(t *testing.T) {
 		WithFiller("nfigure", nil))
 	err := registry.ConfigFile("source.yaml")
 	require.NoError(t, err, "add source.yaml")
-	registry.Request(&testData)
+	require.NoError(t, registry.Request(&testData), "add model")
 	err = registry.Configure()
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 10, testData.II, "II")
@@ -42,7 +42,7 @@ func TestBasicEnv(t *testing.T) {
 		D complex128
 	}
 	registry := NewRegistry()
-	registry.Request(&testData)
+	require.NoError(t, registry.Request(&testData), "add model")
 	err := registry.Configure()
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 3+4i, testData.C, "C")
@@ -62,7 +62,7 @@ func TestBasicFlags(t *testing.T) {
 		called++
 	}))
 	registry := NewRegistry(WithFiller("flag", fh))
-	registry.Request(&testData)
+	require.NoError(t, registry.Request(&testData), "add model")
 	err := registry.Configure()
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 33, testData.I, "i")
@@ -76,7 +76,7 @@ func TestBasicDefaul(t *testing.T) {
 		C complex128 `default:"3+7i"`
 	}
 	registry := NewRegistry()
-	registry.Request(&testData)
+	require.NoError(t, registry.Request(&testData), "add model")
 	err := registry.Configure()
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 3+7i, testData.C, "C")

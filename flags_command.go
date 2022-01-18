@@ -105,14 +105,13 @@ var _ CanConfigureCompleteFiller = &FlagHandler{}
 var _ CanPreConfigureFiller = &FlagHandler{}
 
 type fhInheritable struct {
-	tagName       string
-	registry      *Registry
-	stopOnNonFlag bool
-	doubleDash    bool
-	singleDash    bool
-	combineShort  bool
-	negativeNo    bool
-	helpTag       string
+	tagName      string    //nolint:structcheck
+	registry     *Registry //nolint:structcheck
+	doubleDash   bool
+	singleDash   bool
+	combineShort bool
+	negativeNo   bool
+	helpTag      string
 }
 
 type flagTag struct {
@@ -143,9 +142,9 @@ type flagRef struct {
 
 type flagRefComparable struct {
 	isBool  bool
-	isSlice bool
-	isMap   bool
-	explode int // for arrays only
+	isSlice bool //nolint:structcheck
+	isMap   bool //nolint:structcheck
+	explode int  //nolint:structcheck // for arrays only
 }
 
 // setterKey is used to cache setters.  Setters only depend upon the
@@ -377,11 +376,14 @@ func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 		}
 	}
 	if forceSub || len(h.subcommands) > 0 {
-		h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
+		_, err := h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
 			func() {
 				fmt.Print(h.Usage())
 				os.Exit(0)
 			}))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -439,7 +441,6 @@ const (
 	flagOpt
 	optionOpt
 	parameterOpt
-	subcommandOpt
 	lastOpt // keep this one last in the list
 )
 

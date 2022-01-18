@@ -428,8 +428,8 @@ func recurseFiller(filler Filler, name string, tag reflectutils.Tag) (Filler, er
 			}
 			switch fileTag.Name {
 			case "-":
-				return nil, nil
 				debug("fill recurseFiller w/", tag.Tag, ": skip")
+				return nil, nil
 			case "":
 				//
 				debug("fill recurseFiller w/", tag.Tag, ": keep", name)

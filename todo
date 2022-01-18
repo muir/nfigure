@@ -17,8 +17,6 @@ validation of flags causes usage error
 
 issue with file filler should be blamed on the config file
 
-test where names do not match
-
 split deindent out to its own package
 
 test double-level nested structs
@@ -26,4 +24,10 @@ test double-level nested structs
 rewrites and loops as layer over nflex
 
 combining slices between file filler, flag, and env
+combining maps between file filler and flag
+
+support Len for flags
+support Keys for flags (also needs Recurse?)
+
+support struct filling for flags with prefix as Recurse
 

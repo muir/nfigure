@@ -159,7 +159,6 @@ func lenThroughFill(
 ) (int, bool) {
 	switch reflectutils.NonPointer(t).Kind() {
 	case reflect.Array, reflect.Slice:
-	//
 	default:
 		return 0, false
 	}

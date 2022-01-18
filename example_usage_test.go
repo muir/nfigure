@@ -20,7 +20,7 @@ func Example_usage() {
 	os.Args = strings.Split("program --flag-not-defined", " ")
 	registry := NewRegistry(WithFiller("flag", fh))
 	var arguments arguments
-	registry.Request(&arguments)
+	_ = registry.Request(&arguments)
 	err := registry.Configure()
 	if commonerrors.IsUsageError(err) {
 		fmt.Println(fh.Usage())

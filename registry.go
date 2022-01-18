@@ -22,8 +22,6 @@ type Validate interface {
 type Registry struct {
 	requests         []*Request
 	lock             sync.Mutex
-	configFiles      []file
-	sources          *nflex.MultiSource
 	configureStarted bool
 	registryConfig
 }
@@ -80,27 +78,27 @@ func WithValidate(v Validate) RegistryFuncArg {
 // the behavior for when multiple fillers can potentially
 // provide values.
 //
-// The default meta tag is "nfigure", the same as used for
-// the File fillers.
+// The default meta tag is "nfigure".
 //
 // The first meta tag value is positional and is the name used
 // for recursion or "-" to indicate that no filling should happen.
 //
 // If "first" is true then filling stops after the first filler
-// succeeds in filling anything.
+// succeeds in filling anything.  This is the default.
+//
+// If "last" is true then filling starts with the last filler and
+// stops when a filler suceeds
 //
 // If "desc" is false then filling doesn't descend into the keys,
 // elements, values of something that has been filled at a higher
 // level.
+//
+// If "combine" is true, then multple sources can be combined together
+// when filling arrays, slices, and maps
 func WithMetaTag(tag string) RegistryFuncArg {
 	return func(r *registryConfig) {
 		r.metaTag = tag
 	}
-}
-
-type file struct {
-	name string
-	path []string
 }
 
 // NewRegistry creates a configuration context that is shared among
@@ -116,6 +114,10 @@ type file struct {
 //
 // Use WithFiller to adjust the set of fillers and to add
 // a command-line flags filler.
+//
+// By default, no command-line filler is used.  If you want one, add
+// WithFiller(PosixFlagHanlder()) or WithFiller(GoFlagHandler()) to
+// NewRegistry's functional parameters.
 func NewRegistry(options ...RegistryFuncArg) *Registry {
 	r := &Registry{
 		registryConfig: registryConfig{

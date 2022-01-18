@@ -457,10 +457,11 @@ func TestFlags(t *testing.T) {
 			subcalled := make(map[string]int)
 			for sub, model := range tc.subcommands {
 				sub, model := sub, model
-				fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
+				_, err := fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
 					assert.Equal(t, tc.remaining, args, "remaining args in "+sub)
 					subcalled[sub]++
 				}))
+				assert.NoError(t, err, "add help subcommand")
 			}
 			if tc.goFlags {
 				fh = GoFlagHandler(args...)
@@ -538,9 +539,7 @@ func TestFlags(t *testing.T) {
 var deindentRE = regexp.MustCompile(`\A(\s+)(?:\S|\n)`)
 
 func deindent(s string) string {
-	if strings.HasPrefix(s, "\n") {
-		s = s[1:]
-	}
+	s = strings.TrimPrefix(s, "\n")
 	m := deindentRE.FindStringSubmatch(s)
 	if len(m) == 0 {
 		return s

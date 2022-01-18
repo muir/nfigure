@@ -125,6 +125,7 @@ func TestMetaFirstScalar(t *testing.T) {
 			err := registry.ConfigFile("source.yaml")
 			require.NoError(t, err, "add source.yaml")
 			err = registry.ConfigFile("source2.yaml")
+			require.NoError(t, err, "add source2.yaml")
 			require.NoError(t, registry.Request(tc.base), "request")
 			t.Log("About to Configure")
 			err = registry.Configure()
