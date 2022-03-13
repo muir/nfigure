@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/muir/commonerrors"
-	"github.com/muir/nject/nject"
+	"github.com/muir/nject"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 	"go.octolab.org/pointer"
@@ -100,9 +100,11 @@ type FlagHandler struct {
 	defaultTag         string
 }
 
-var _ CanPreWalkFiller = &FlagHandler{}
-var _ CanConfigureCompleteFiller = &FlagHandler{}
-var _ CanPreConfigureFiller = &FlagHandler{}
+var (
+	_ CanPreWalkFiller           = &FlagHandler{}
+	_ CanConfigureCompleteFiller = &FlagHandler{}
+	_ CanPreConfigureFiller      = &FlagHandler{}
+)
 
 type fhInheritable struct {
 	tagName      string    //nolint:structcheck
