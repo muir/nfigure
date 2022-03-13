@@ -3,6 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/muir/nfigure?status.png)](https://pkg.go.dev/github.com/muir/nfigure)
 ![unit tests](https://github.com/muir/nfigure/actions/workflows/go.yml/badge.svg)
 [![report card](https://goreportcard.com/badge/github.com/muir/nfigure)](https://goreportcard.com/report/github.com/muir/nfigure)
+[![codecov](https://codecov.io/gh/muir/nfigure/branch/main/graph/badge.svg)](https://codecov.io/gh/muir/nfigure)
 
 Install:
 
