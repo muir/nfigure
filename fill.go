@@ -304,6 +304,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 			return false, errors.Wrapf(err, "flll %s using %s", x.name, fp.Tag.Tag)
 		}
 		if filled {
+			x.fillers.Remove(fp.Tag.Tag)
 			anyFilled = true
 			if isStructural && combine {
 				continue

@@ -46,13 +46,17 @@ func (f *fillerCollection) Order() []string {
 	return f.order
 }
 
+func (f *fillerCollection) Remove(tag string) {
+	if _, ok := f.m[tag]; ok {
+		debug("fillers: REMOVE", tag)
+		f.dirty = true
+		delete(f.m, tag)
+	}
+}
+
 func (f *fillerCollection) Add(tag string, filler Filler) {
 	if filler == nil {
-		if _, ok := f.m[tag]; ok {
-			debug("fillers: REMOVE", tag)
-			f.dirty = true
-			delete(f.m, tag)
-		}
+		f.Remove(tag)
 	} else {
 		if _, ok := f.m[tag]; !ok {
 			f.order = append(f.order, tag)
