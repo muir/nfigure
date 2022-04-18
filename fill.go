@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/AlekSi/pointer"
 	"github.com/muir/commonerrors"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
-	"go.octolab.org/pointer"
 )
 
 // Filler s are applied recursively to structures that need
@@ -109,8 +109,8 @@ func (f *fillerCollection) Len(
 	pairs := f.pairs(x.tags, x.meta)
 	debugf("fill: Len: %s pairs: %+v", x.name, pairs)
 	lengths := make([]int, len(pairs))
-	combine := pointer.ValueOfBool(x.meta.Combine)
-	first := pointer.ValueOfBool(x.meta.First)
+	combine := pointer.GetBool(x.meta.Combine)
+	first := pointer.GetBool(x.meta.First)
 	for i, fp := range pairs {
 		canLen, ok := fp.Filler.(CanLenFiller)
 		if !ok {
@@ -155,8 +155,8 @@ func (f *fillerCollection) Len(
 func (f *fillerCollection) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
 	var all []string
 	seen := make(map[string]struct{})
-	first := pointer.ValueOfBool(meta.First)
-	combine := pointer.ValueOfBool(meta.Combine)
+	first := pointer.GetBool(meta.First)
+	combine := pointer.GetBool(meta.Combine)
 	for _, fp := range f.pairs(tagSet, meta) {
 		canKey, ok := fp.Filler.(CanKeysFiller)
 		if !ok {
@@ -249,6 +249,10 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 	return anyFilled, nil
 }
 
+func (f *fillerCollection) SimpleRecurse(name string, t reflect.Type) (*fillerCollection, error) {
+	return f.Recurse(name, t, reflectutils.TagSet{})
+}
+
 func (f *fillerCollection) Recurse(name string, t reflect.Type, tagSet reflectutils.TagSet) (*fillerCollection, error) {
 	f = f.Copy()
 	for tagName, filler := range f.m {
@@ -294,8 +298,8 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	}
 
 	var anyFilled bool
-	combine := pointer.ValueOfBool(x.meta.Combine)
-	first := pointer.ValueOfBool(x.meta.First)
+	combine := pointer.GetBool(x.meta.Combine)
+	first := pointer.GetBool(x.meta.First)
 	debug("fill: pairs next,", x.name, "first:", first, "combine:", combine)
 	for _, fp := range x.fillers.pairs(x.tags, x.meta) {
 		filled, err := fp.Filler.Fill(t, v, fp.Tag, first, combine)
@@ -393,7 +397,7 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		} else {
 			m = v
 		}
-		f, err := reflectutils.MakeStringSetter(reflect.PtrTo(t.Key()))
+		f, err := reflectutils.MakeStringSetter(t.Key())
 		if err != nil {
 			return false, commonerrors.ProgrammerError(errors.Wrapf(err, "set key for %T", t))
 		}
@@ -401,17 +405,17 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 		elemType := t.Elem()
 		for _, key := range keys {
 			kp := reflect.New(t.Key())
-			err := f(kp, key)
+			err := f(kp.Elem(), key)
 			if err != nil {
 				return false, errors.Wrap(err, "set key")
 			}
 			vp := reflect.New(elemType)
 			debug("fill: recurse for map key", key, "in", x.name)
-			x.fillers, err = fillers.Recurse(key, elemType, x.tags)
+			x.fillers, err = fillers.SimpleRecurse(key, elemType)
 			if err != nil {
 				return false, err
 			}
-			filled, err := x.fillField(elemType, vp)
+			filled, err := x.fillField(elemType, vp.Elem())
 			if err != nil {
 				return false, errors.Wrap(err, "set value")
 			}
@@ -442,7 +446,7 @@ func recurseFiller(filler Filler, name string, tag reflectutils.Tag) (Filler, er
 				//
 				debug("fill recurseFiller w/", tag.Tag, ": keep", name)
 			default:
-				debug("fill recurseFiller w/", tag.Tag, ": use", fileTag.Name, "instead of", name)
+				debug("fill recurseFiller w/", tag.Tag, ": use", fileTag.Name, "instead of", name, "from", callers(6))
 				name = fileTag.Name
 			}
 		}
@@ -451,6 +455,7 @@ func recurseFiller(filler Filler, name string, tag reflectutils.Tag) (Filler, er
 	return filler, nil
 }
 
+// simpleRecurseFiller does a recursion using name on a single filller
 func simpleRecurseFiller(filler Filler, name string) (Filler, error) {
 	if canRecurse, ok := filler.(CanRecurseFiller); ok {
 		return canRecurse.Recurse(name)

@@ -29,7 +29,7 @@ func callers(levels int) []string {
 	r := make([]string, 0, n)
 	for {
 		frame, more := frames.Next()
-		r = append(r, fmt.Sprintf("%s:%d %s", filepath.Base(frame.File), frame.Line, filepath.Base(frame.Function)))
+		r = append(r, fmt.Sprintf("%s:%d ", filepath.Base(frame.File), frame.Line))
 		if !more || len(r) == n {
 			break
 		}

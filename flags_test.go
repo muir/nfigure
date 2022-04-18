@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/mohae/deepcopy"
 	"github.com/muir/commonerrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.octolab.org/pointer"
 )
 
 type flagSet1 struct {

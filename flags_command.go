@@ -9,11 +9,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AlekSi/pointer"
 	"github.com/muir/commonerrors"
 	"github.com/muir/nject"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
-	"go.octolab.org/pointer"
 )
 
 // General calling order....

@@ -72,12 +72,12 @@ type fileTag struct {
 // Recurse is part of the CanRecurseFiller contract and is called by registry.Configure()
 func (s FileFiller) Recurse(name string) (Filler, error) {
 	if s.source == nil {
-		debug("source: recurse", name, "-> no filler(nil) from", callers(4))
+		debug("source: recurse", name, "-> no filler(nil) from", callers(8))
 		return nil, nil
 	}
 	source := s.source.Recurse(name)
 	if source == nil {
-		debug("source: recurse", name, "-> does not exist(nil) from", callers(4))
+		debug("source: recurse", name, "-> does not exist(nil) from", callers(8))
 		return nil, nil
 	}
 	debug("source: recurse", name, "from", callers(4))

@@ -24,12 +24,18 @@ type testDataA struct {
 	QQ []string `nf:"QQ" n2:"RR" n3:"-" meta:",combine"`
 }
 
+type testDataB struct {
+	SS map[string]int `n4:"ss" n5:"ss" meta:",combine"`
+}
+
 var mixedCases = []struct {
 	base      interface{}
 	want      interface{}
 	cmd       string
 	fillers   string
 	remaining string
+	redact    func(interface{}) interface{}
+	files     []string
 }{
 	{
 		cmd:  "empty",
@@ -84,6 +90,23 @@ var mixedCases = []struct {
 		fillers:   "config flag nf n2 meta nfigure noenv",
 		remaining: "combine qq",
 	},
+	{
+		cmd:  "combine maps",
+		base: &testDataB{},
+		want: &testDataB{
+			SS: map[string]int{
+				"a": 328,
+				"b": 93,
+				"c": 28,
+			},
+		},
+		redact: func(td interface{}) interface{} {
+			d := td.(*testDataB)
+			return d.SS
+		},
+		fillers: "n4 n5",
+		files:   []string{},
+	},
 }
 
 func TestMetaFirstScalar(t *testing.T) {
@@ -95,6 +118,7 @@ func TestMetaFirstScalar(t *testing.T) {
 		t.Run(tc.cmd, func(t *testing.T) {
 			os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
 			var called int
+			var expectCalled int
 			fh := PosixFlagHandler(OnStart(func(args []string) {
 				if tc.remaining == "" {
 					assert.Equal(t, ([]string)(nil), args, "remaining args")
@@ -103,6 +127,11 @@ func TestMetaFirstScalar(t *testing.T) {
 				}
 				called++
 			}))
+			filler := func(path string, keys ...string) Filler {
+				f, err := NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content))).AddConfigFile(path, keys)
+				require.NoError(t, err, path)
+				return f
+			}
 			potentialArgs := map[string]RegistryFuncArg{
 				"config":  WithFiller("config", nil),
 				"flag":    WithFiller("flag", fh),
@@ -111,6 +140,8 @@ func TestMetaFirstScalar(t *testing.T) {
 				"nfigure": WithFiller("nfigure", nil),
 				"n2":      WithFiller("n2", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 				"n3":      WithFiller("n3", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
+				"n4":      WithFiller("n4", filler("source4.yaml")),
+				"n5":      WithFiller("n5", filler("source5.yaml")),
 				"noenv":   WithFiller("env", nil),
 			}
 			var args []RegistryFuncArg
@@ -119,20 +150,33 @@ func TestMetaFirstScalar(t *testing.T) {
 				a, ok := potentialArgs[n]
 				require.Truef(t, ok, "set %s", n)
 				args = append(args, a)
+				if n == "flag" {
+					expectCalled = 1
+				}
 			}
 
 			registry := NewRegistry(args...)
-			err := registry.ConfigFile("source.yaml")
-			require.NoError(t, err, "add source.yaml")
-			err = registry.ConfigFile("source2.yaml")
-			require.NoError(t, err, "add source2.yaml")
+			files := []string{"source.yaml", "source2.yaml"}
+			if tc.files != nil {
+				files = tc.files
+			}
+			for _, file := range files {
+				err := registry.ConfigFile(file)
+				require.NoErrorf(t, err, "add %s", file)
+			}
 			require.NoError(t, registry.Request(tc.base), "request")
 			t.Log("About to Configure")
-			err = registry.Configure()
+			err := registry.Configure()
 			require.NoError(t, err, "configure")
+			var want interface{}
+			var got interface{}
+			want, got = tc.want, tc.base
+			if tc.redact != nil {
+				want, got = tc.redact(tc.want), tc.redact(tc.base)
+			}
 			t.Logf("got %+v", tc.base)
-			assert.Equal(t, tc.want, tc.base, "config results")
-			assert.Equal(t, 1, called, "called")
+			assert.Equal(t, want, got, "config results")
+			assert.Equal(t, expectCalled, called, "called")
 		})
 	}
 }
