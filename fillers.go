@@ -1,8 +1,8 @@
 package nfigure
 
 import (
+	"github.com/AlekSi/pointer"
 	"github.com/muir/reflectutils"
-	"go.octolab.org/pointer"
 )
 
 type fillerCollection struct {
@@ -120,7 +120,7 @@ func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []
 			debug("fillers, no filler (no pair) for", tag.Tag)
 		}
 	}
-	if pointer.ValueOfBool(meta.First) {
+	if pointer.GetBool(meta.First) {
 		for _, tag := range tagSet.Tags {
 			p(tag)
 		}
