@@ -16,6 +16,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// These are used for testing only
+var testMode bool
+var testOutput string
+
 // General calling order....
 //
 // 1. PosixFlagHandler() or GoFlagHandler()
@@ -381,8 +385,13 @@ func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 	if forceSub || len(h.subcommands) > 0 {
 		_, err := h.AddSubcommand("help", "provide this usage info", nil, OnActivate(
 			func() {
-				fmt.Print(h.Usage())
-				os.Exit(0)
+				if testMode {
+					testOutput = h.Usage()
+					panic("exit0")
+				} else {
+					fmt.Print(h.Usage())
+					os.Exit(0)
+				}
 			}))
 		if err != nil {
 			return err

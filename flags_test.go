@@ -2,9 +2,7 @@ package nfigure
 
 import (
 	"flag"
-	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
@@ -470,26 +468,15 @@ func TestFlags(t *testing.T) {
 			baseCopy := deepcopy.Copy(tc.base)
 			require.NoError(t, registry.Request(baseCopy), "request")
 			if tc.capture != "" {
-				if os.Getenv("DOING_CAPTURE") == "yeah" {
-					fmt.Println("about to configure...")
+				testMode = true
+				testOutput = ""
+				defer func() { testMode = false }()
+				assert.PanicsWithValue(t, "exit0", func() {
 					err := registry.Configure()
-					fmt.Println("Did not exit, error is", err)
-					os.Exit(0)
-				}
-				cmd := exec.Command(argv0, "-test.run="+t.Name())
-				cmd.Env = append(os.Environ(), "DOING_CAPTURE=yeah")
-				out, err := cmd.Output()
-				if err != nil {
-					e, ok := err.(*exec.ExitError)
-					require.Truef(t, ok, "error type: %T %+v", err, err)
-					assert.True(t, e.Success(), "program exited 0")
-				}
-				got := string(out)
-				if assert.True(t, strings.HasPrefix(got, "about to configure...\n")) {
-					got = got[len("about to configure...\n"):]
-					t.Log("got header")
-				}
-				got = usageRE.ReplaceAllLiteralString(got, "Usage: PROGRAME-NAME ")
+					assert.NoError(t, err)
+					panic("not this value")
+				})
+				got := usageRE.ReplaceAllLiteralString(testOutput, "Usage: PROGRAME-NAME ")
 				assert.Equal(t, tc.capture, got, "command output")
 				return
 			}

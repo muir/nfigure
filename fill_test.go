@@ -28,6 +28,29 @@ type testDataB struct {
 	SS map[string]int `n4:"ss" n5:"ss" meta:",combine"`
 }
 
+type testDataC struct {
+	OO string
+}
+
+type testDataD struct {
+	QQ [3]string
+	RR []string
+}
+
+type testDataE struct {
+	B   bool
+	U   uint
+	U8  uint8
+	U16 uint16
+	U32 uint32
+	U64 uint64
+	F   float32
+	F64 float64
+	C1  complex128
+	C2  complex64
+	C3  complex128
+}
+
 var mixedCases = []struct {
 	base      interface{}
 	want      interface{}
@@ -36,6 +59,7 @@ var mixedCases = []struct {
 	remaining string
 	redact    func(interface{}) interface{}
 	files     []string
+	fromRoot  []string
 }{
 	{
 		cmd:  "empty",
@@ -107,6 +131,47 @@ var mixedCases = []struct {
 		fillers: "n4 n5",
 		files:   []string{},
 	},
+	{
+		cmd:  "fromRoot",
+		base: &testDataC{},
+		want: &testDataC{
+			OO: "source.yaml",
+		},
+		fromRoot: []string{"MM"},
+		fillers:  "nf",
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd: "arrays",
+		base: &testDataD{
+			RR: []string{"prior"},
+		},
+		want: &testDataD{
+			QQ: [3]string{"a", "b", "c"},
+			RR: []string{"prior", "g", "h", "i"},
+		},
+		fillers: "",
+		files:   []string{"source.yaml"},
+	},
+	{
+		cmd:  "data types",
+		base: &testDataE{},
+		want: &testDataE{
+			B:   true,
+			U:   732,
+			U8:  28,
+			U16: 2832,
+			U32: 382302,
+			U64: 32828328392,
+			F:   9.1,
+			F64: 282.2,
+			C1:  7 + 9i,
+			C2:  4 + 8i,
+			C3:  23 + 93i,
+		},
+		fillers: "",
+		files:   []string{"source6.yaml"},
+	},
 }
 
 func TestMetaFirstScalar(t *testing.T) {
@@ -145,13 +210,15 @@ func TestMetaFirstScalar(t *testing.T) {
 				"noenv":   WithFiller("env", nil),
 			}
 			var args []RegistryFuncArg
-			for _, n := range strings.Split(tc.fillers, " ") {
-				t.Logf("Enable %s", n)
-				a, ok := potentialArgs[n]
-				require.Truef(t, ok, "set %s", n)
-				args = append(args, a)
-				if n == "flag" {
-					expectCalled = 1
+			if tc.fillers != "" {
+				for _, n := range strings.Split(tc.fillers, " ") {
+					t.Logf("Enable %s", n)
+					a, ok := potentialArgs[n]
+					require.Truef(t, ok, "set %s", n)
+					args = append(args, a)
+					if n == "flag" {
+						expectCalled = 1
+					}
 				}
 			}
 
@@ -164,7 +231,11 @@ func TestMetaFirstScalar(t *testing.T) {
 				err := registry.ConfigFile(file)
 				require.NoErrorf(t, err, "add %s", file)
 			}
-			require.NoError(t, registry.Request(tc.base), "request")
+			var registryArgs []RegistryFuncArg
+			if tc.fromRoot != nil {
+				registryArgs = append(registryArgs, FromRoot(tc.fromRoot...))
+			}
+			require.NoError(t, registry.Request(tc.base, registryArgs...), "request")
 			t.Log("About to Configure")
 			err := registry.Configure()
 			require.NoError(t, err, "configure")
