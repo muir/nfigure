@@ -194,8 +194,13 @@ func (h *FlagHandler) parseFlags(i int) error {
 		break
 	}
 	if h.helpText != nil && len(h.longFlags["help"].values) != 0 {
-		fmt.Print(h.Usage())
-		os.Exit(0)
+		if testMode {
+			testOutput = h.Usage()
+			panic("exit0")
+		} else {
+			fmt.Print(h.Usage())
+			os.Exit(0)
+		}
 	}
 	h.remainder = remainder
 	return nil
