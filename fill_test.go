@@ -51,15 +51,20 @@ type testDataE struct {
 	C3  complex128
 }
 
+type testDataF struct {
+	V string `nf:"v"`
+}
+
 var mixedCases = []struct {
-	base      interface{}
-	want      interface{}
-	cmd       string
-	fillers   string
-	remaining string
-	redact    func(interface{}) interface{}
-	files     []string
-	fromRoot  []string
+	base             interface{}
+	want             interface{}
+	cmd              string
+	fillers          string
+	remaining        string
+	redact           func(interface{}) interface{}
+	files            []string
+	fromRoot         []string
+	registryFromRoot []string
 }{
 	{
 		cmd:  "empty",
@@ -142,6 +147,27 @@ var mixedCases = []struct {
 		files:    []string{"source.yaml"},
 	},
 	{
+		cmd:  "fromRegistryRootCombo",
+		base: &testDataF{},
+		want: &testDataF{
+			V: "baz",
+		},
+		registryFromRoot: []string{"A"},
+		fromRoot:         []string{"B", "C"},
+		fillers:          "nf",
+		files:            []string{"source7.yaml"},
+	},
+	{
+		cmd:  "fromRegistryRoot",
+		base: &testDataF{},
+		want: &testDataF{
+			V: "bar",
+		},
+		registryFromRoot: []string{"A", "B"},
+		fillers:          "nf",
+		files:            []string{"source7.yaml"},
+	},
+	{
 		cmd: "arrays",
 		base: &testDataD{
 			RR: []string{"prior"},
@@ -220,6 +246,9 @@ func TestMetaFirstScalar(t *testing.T) {
 						expectCalled = 1
 					}
 				}
+			}
+			if tc.registryFromRoot != nil {
+				args = append(args, FromRoot(tc.registryFromRoot...))
 			}
 
 			registry := NewRegistry(args...)
