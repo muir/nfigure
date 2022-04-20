@@ -231,11 +231,11 @@ func TestMetaFirstScalar(t *testing.T) {
 				err := registry.ConfigFile(file)
 				require.NoErrorf(t, err, "add %s", file)
 			}
-			var registryArgs []RegistryFuncArg
+			var requestArgs []RegistryFuncArg
 			if tc.fromRoot != nil {
-				registryArgs = append(registryArgs, FromRoot(tc.fromRoot...))
+				requestArgs = append(requestArgs, FromRoot(tc.fromRoot...))
 			}
-			require.NoError(t, registry.Request(tc.base, registryArgs...), "request")
+			require.NoError(t, registry.Request(tc.base, requestArgs...), "request")
 			t.Log("About to Configure")
 			err := registry.Configure()
 			require.NoError(t, err, "configure")

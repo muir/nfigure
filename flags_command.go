@@ -329,7 +329,17 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 
 // WithDefaultsTag is only relevant when used with ExportToFlagSet().  It
 // overrides the tag used for finding default values.  The default default
-// tag is "default".
+// tag is "default".  Default values are only available for some kinds of
+// flags because the "flag" package does not support defaults on flags that
+// are defined with functions.  Defaults are available for:
+//	bool
+//	duration
+//	float64
+//	int
+//	int64
+//	string
+//	uint
+//	uint64
 func WithDefaultsTag(defaultTag string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.defaultTag = defaultTag

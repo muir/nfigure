@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/muir/commonerrors"
@@ -116,6 +117,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 	if h.defaultTag != "" {
 		defaultTag = h.defaultTag
 	}
+	debug("default tag is", defaultTag)
 
 	value := reflect.ValueOf(model)
 	nonPtr := value
@@ -170,6 +172,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				return v
 			}
 		}
+		debug("flagset, setter type", ref.Name[0], setterType)
 		switch {
 		case len(ref.Name) == 0:
 			return commonerrors.LibraryError(errors.New("missing name"))
@@ -277,8 +280,67 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				return commonerrors.LibraryError(errors.Errorf("internal error: not expecting %s", v.Type()))
 			}
 
+		case setterType == durationType:
+			v := getV()
+			var defaultDuration time.Duration
+			if defaultValue.Value != "" {
+				var err error
+				defaultDuration, err = time.ParseDuration(defaultValue.Value)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default duration", defaultTag))
+				}
+			}
+			fs.DurationVar(v.Addr().Interface().(*time.Duration), ref.Name[0], defaultDuration, help)
+		case setterType.Kind() == reflect.String:
+			v := getV()
+			fs.StringVar(v.Addr().Interface().(*string), ref.Name[0], defaultValue.Value, help)
+		case setterType.Kind() == reflect.Int:
+			v := getV()
+			var defaultInt int
+			if defaultValue.Value != "" {
+				var err error
+				defaultInt, err = strconv.Atoi(defaultValue.Value)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default int", defaultTag))
+				}
+			}
+			fs.IntVar(v.Addr().Interface().(*int), ref.Name[0], defaultInt, help)
+		case setterType.Kind() == reflect.Int64:
+			v := getV()
+			var defaultInt64 int64
+			if defaultValue.Value != "" {
+				var err error
+				defaultInt64, err = strconv.ParseInt(defaultValue.Value, 10, 64)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default int", defaultTag))
+				}
+			}
+			fs.Int64Var(v.Addr().Interface().(*int64), ref.Name[0], defaultInt64, help)
+		case setterType.Kind() == reflect.Uint:
+			v := getV()
+			var defaultInt uint64
+			if defaultValue.Value != "" {
+				var err error
+				defaultInt, err = strconv.ParseUint(defaultValue.Value, 10, 32)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default int", defaultTag))
+				}
+			}
+			fs.UintVar(v.Addr().Interface().(*uint), ref.Name[0], uint(defaultInt), help)
+		case setterType.Kind() == reflect.Uint64:
+			v := getV()
+			var defaultInt uint64
+			if defaultValue.Value != "" {
+				var err error
+				defaultInt, err = strconv.ParseUint(defaultValue.Value, 10, 64)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default int", defaultTag))
+				}
+			}
+			fs.Uint64Var(v.Addr().Interface().(*uint64), ref.Name[0], defaultInt, help)
 		default:
 			fs.Func(ref.Name[0], help, func(s string) error {
+				debug("DSLJDSL:FJSD:LFJSD:LFJSD:LFJSDL:JFDSLJFSD:J:", s)
 				err := setter(v, s)
 				return commonerrors.UsageError(errors.Wrap(err, s))
 			})
@@ -292,3 +354,5 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 
 	return nil
 }
+
+var durationType = reflect.TypeOf(time.Duration(0))
