@@ -1,6 +1,6 @@
 name: CodeCov Test and coverage
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
