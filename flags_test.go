@@ -16,7 +16,7 @@ import (
 )
 
 type flagSet1 struct {
-	I   int       `flag:"iflag i"`
+	I   int       `flag:"iflag i" frogfault:"382"`
 	C   int       `flag:"counter c,counter"`
 	NC  int       `flag:"ncounter,!counter"`
 	SA1 [2]string `flag:"sa1,split=comma"`
@@ -48,12 +48,24 @@ type flagSet5 struct {
 	P *map[string]bool   `flag:"P,map=explode,split=/"`
 }
 
+type flagSet6 struct {
+	S    string        `flag:"sflag" default:"xyz"`
+	B    bool          `flag:"bflag" default:"true" bbad:"9"`
+	I    int           `flag:"iflag" default:"10" ibad:"ten"`
+	I64  int64         `flag:"i64flag" default:"20" i64bad:"twenty"`
+	UI   uint          `flag:"uiflag" default:"30" uibad:"thrirty"`
+	UI64 uint64        `flag:"ui64flag" default:"40" ui64bad:"forty"`
+	D    time.Duration `flag:"dflag" default:"30m10s" dbad:"thirty min"`
+	C    complex64     `flag:"cflag"`
+}
+
 type importBool struct {
 	name string
 	dflt bool
 	help string
 	want bool
 }
+
 type importString struct {
 	name string
 	dflt string
@@ -61,15 +73,18 @@ type importString struct {
 	want string
 }
 
-var cases = []struct {
+type flagTestCase struct {
 	base           interface{}
 	cmd            string
 	exportCmd      string
 	want           interface{}
 	wantExport     interface{}
+	exportDefault  string
 	exportToo      bool
 	remaining      []string
+	again          bool // doesn't work with capture or error
 	error          string
+	exportError    string
 	goFlags        bool
 	subcommands    map[string]interface{}
 	sub            string
@@ -78,7 +93,10 @@ var cases = []struct {
 	additionalArgs []FlaghandlerOptArg
 	importBools    []importBool
 	importStrings  []importString
-}{
+	name           string // defaults to cmd
+}
+
+var cases = []flagTestCase{
 	{
 		base: &flagSet1{},
 		cmd:  "-i 3",
@@ -86,6 +104,71 @@ var cases = []struct {
 			I: 3,
 		},
 		exportCmd: "-iflag 3",
+	},
+	{
+		base:          &flagSet1{},
+		exportDefault: "frogfault",
+		wantExport: &flagSet1{
+			I: 382,
+		},
+		name: "export int",
+	},
+	{
+		base: &flagSet6{},
+		name: "export flagset",
+		wantExport: &flagSet6{
+			S:    "xyz",
+			D:    30*time.Minute + 10*time.Second,
+			I:    10,
+			I64:  20,
+			UI:   30,
+			UI64: 40,
+			B:    true,
+		},
+	},
+	{
+		base: &flagSet6{},
+		wantExport: &flagSet6{
+			S:    "abc",
+			D:    10 * time.Minute,
+			I:    11,
+			I64:  21,
+			UI:   31,
+			UI64: 41,
+			B:    false,
+			C:    289 + 8i,
+		},
+		exportCmd: "-sflag abc -dflag 10m -iflag 11 -i64flag 21 -uiflag 31 -ui64flag 41 -bflag=false -cflag 289+8i",
+	},
+	{
+		base:          &flagSet6{},
+		name:          "export dbad",
+		exportError:   "invalid duration",
+		exportDefault: "dbad",
+	},
+	{
+		base:          &flagSet6{},
+		name:          "export ibad",
+		exportError:   "invalid syntax",
+		exportDefault: "ibad",
+	},
+	{
+		base:          &flagSet6{},
+		name:          "export i64bad",
+		exportError:   "invalid syntax",
+		exportDefault: "i64bad",
+	},
+	{
+		base:          &flagSet6{},
+		name:          "export ui64bad",
+		exportError:   "invalid syntax",
+		exportDefault: "ui64bad",
+	},
+	{
+		base:          &flagSet6{},
+		name:          "export uibad",
+		exportError:   "invalid syntax",
+		exportDefault: "uibad",
 	},
 	{
 		base: &flagSet1{},
@@ -137,8 +220,9 @@ var cases = []struct {
 		exportToo: true,
 	},
 	{
-		base: &flagSet1{},
-		cmd:  "--sa1=foo --sa1=bar",
+		base:  &flagSet1{},
+		cmd:   "--sa1=foo --sa1=bar",
+		again: true,
 		want: &flagSet1{
 			SA1: [2]string{"foo", "bar"},
 		},
@@ -266,8 +350,9 @@ var cases = []struct {
 		},
 	},
 	{
-		base: &flagSet5{},
-		cmd:  "-O 3+4i=7 -O 9.3-2i=-13",
+		base:  &flagSet5{},
+		cmd:   "-O 3+4i=7 -O 9.3-2i=-13",
+		again: true,
 		want: &flagSet5{
 			O: map[complex128]int{
 				3 + 4i:   7,
@@ -420,106 +505,137 @@ var usageRE = regexp.MustCompile(`\AUsage: \S+ `)
 
 func TestFlags(t *testing.T) {
 	for _, tc := range cases {
-		t.Run(tc.cmd, func(t *testing.T) {
-			t.Log(tc.cmd)
-			var called int
-			os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
-			args := []FlaghandlerOptArg{
-				OnStart(func(args []string) {
-					if tc.sub == "" {
-						assert.Equal(t, tc.remaining, args, "remaining args")
-					} else {
-						assert.Equal(t, ([]string)(nil), args, "remaining args")
-					}
-					called++
-				}),
-			}
-			args = append(args, tc.additionalArgs...)
-			bools := make([]*bool, len(tc.importBools))
-			if tc.importBools != nil {
-				fs := flag.NewFlagSet("importedBools", flag.ContinueOnError)
-				for i, spec := range tc.importBools {
-					bools[i] = fs.Bool(spec.name, spec.dflt, spec.help)
-				}
-				args = append(args, ImportFlagSet(fs))
-			}
-			istring := make([]*string, len(tc.importStrings))
-			if tc.importStrings != nil {
-				fs := flag.NewFlagSet("importedStrings", flag.ContinueOnError)
-				for i, spec := range tc.importStrings {
-					istring[i] = fs.String(spec.name, spec.dflt, spec.help)
-				}
-				args = append(args, ImportFlagSet(fs))
-			}
-			fh := PosixFlagHandler(args...)
-			subcalled := make(map[string]int)
-			for sub, model := range tc.subcommands {
-				sub, model := sub, model
-				_, err := fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
-					assert.Equal(t, tc.remaining, args, "remaining args in "+sub)
-					subcalled[sub]++
-				}))
-				assert.NoError(t, err, "add help subcommand")
-			}
-			if tc.goFlags {
-				fh = GoFlagHandler(args...)
-			}
-			registry := NewRegistry(WithFiller("flag", fh))
-			baseCopy := deepcopy.Copy(tc.base)
-			require.NoError(t, registry.Request(baseCopy), "request")
-			if tc.capture != "" {
-				testMode = true
-				testOutput = ""
-				defer func() { testMode = false }()
-				assert.PanicsWithValue(t, "exit0", func() {
-					err := registry.Configure()
-					assert.NoError(t, err)
-					panic("not this value")
-				})
-				got := usageRE.ReplaceAllLiteralString(testOutput, "Usage: PROGRAME-NAME ")
-				assert.Equal(t, tc.capture, got, "command output")
-				return
-			}
-			if tc.want != nil {
-				err := registry.Configure()
-				if tc.error != "" {
-					if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
-						assert.Contains(t, err.Error(), tc.error, "configure error")
-						assert.True(t, commonerrors.IsUsageError(err), "is usage error")
-					}
-					return
-				}
-				require.NoError(t, err, "configure")
-				assert.Equal(t, tc.want, baseCopy, "data")
-				assert.Equal(t, 1, called, "onstart call count")
-				if tc.sub == "" {
-					assert.Equal(t, map[string]int{}, subcalled, "sub called")
-				} else {
-					assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
-				}
-				for i, spec := range tc.importBools {
-					assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
-				}
-				for i, spec := range tc.importStrings {
-					assert.Equal(t, spec.want, *istring[i], "string "+spec.name)
-				}
-			}
-			if tc.wantExport != nil || tc.exportCmd != "" || tc.exportToo {
-				exportBase := deepcopy.Copy(tc.base)
-				fs := flag.NewFlagSet("foo", flag.ContinueOnError)
-				require.NoError(t, ExportToFlagSet(fs, "flag", exportBase), "export flagset")
-				args := strings.Split(tc.cmd, " ")
-				if tc.exportCmd != "" {
-					args = strings.Split(tc.exportCmd, " ")
-				}
-				require.NoError(t, fs.Parse(args), "parse exported flags")
-				want := tc.want
-				if tc.wantExport != nil {
-					want = tc.wantExport
-				}
-				assert.Equal(t, want, exportBase, "data")
-			}
+		n := tc.cmd
+		if tc.name != "" {
+			n = tc.name
+		}
+		t.Run(n, func(t *testing.T) {
+			flagTest(t, tc)
 		})
+		if tc.again {
+			t.Run(n+"-again", func(t *testing.T) {
+				tc.again = false
+				flagTest(t, tc)
+			})
+		}
+	}
+}
+
+func flagTest(t *testing.T, tc flagTestCase) {
+	t.Log(tc.cmd)
+	var called int
+	os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
+	args := []FlaghandlerOptArg{
+		OnStart(func(args []string) {
+			if tc.sub == "" {
+				assert.Equal(t, tc.remaining, args, "remaining args")
+			} else {
+				assert.Equal(t, ([]string)(nil), args, "remaining args")
+			}
+			called++
+		}),
+	}
+	args = append(args, tc.additionalArgs...)
+	bools := make([]*bool, len(tc.importBools))
+	if tc.importBools != nil {
+		fs := flag.NewFlagSet("importedBools", flag.ContinueOnError)
+		for i, spec := range tc.importBools {
+			bools[i] = fs.Bool(spec.name, spec.dflt, spec.help)
+		}
+		args = append(args, ImportFlagSet(fs))
+	}
+	istring := make([]*string, len(tc.importStrings))
+	if tc.importStrings != nil {
+		fs := flag.NewFlagSet("importedStrings", flag.ContinueOnError)
+		for i, spec := range tc.importStrings {
+			istring[i] = fs.String(spec.name, spec.dflt, spec.help)
+		}
+		args = append(args, ImportFlagSet(fs))
+	}
+	fh := PosixFlagHandler(args...)
+	subcalled := make(map[string]int)
+	for sub, model := range tc.subcommands {
+		sub, model := sub, model
+		_, err := fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
+			assert.Equal(t, tc.remaining, args, "remaining args in "+sub)
+			subcalled[sub]++
+		}))
+		assert.NoError(t, err, "add help subcommand")
+	}
+	if tc.goFlags {
+		fh = GoFlagHandler(args...)
+	}
+	registry := NewRegistry(WithFiller("flag", fh))
+	baseCopy := deepcopy.Copy(tc.base)
+	require.NoError(t, registry.Request(baseCopy), "request")
+	if tc.capture != "" {
+		testMode = true
+		testOutput = ""
+		defer func() { testMode = false }()
+		assert.PanicsWithValue(t, "exit0", func() {
+			err := registry.Configure()
+			assert.NoError(t, err)
+			panic("not this value")
+		})
+		got := usageRE.ReplaceAllLiteralString(testOutput, "Usage: PROGRAME-NAME ")
+		assert.Equal(t, tc.capture, got, "command output")
+		return
+	}
+	if tc.want != nil {
+		err := registry.Configure()
+		if tc.error != "" {
+			if assert.NotNilf(t, err, "expected configure error %s", tc.error) {
+				assert.Contains(t, err.Error(), tc.error, "configure error")
+				assert.True(t, commonerrors.IsUsageError(err), "is usage error")
+			}
+			return
+		}
+		require.NoError(t, err, "configure")
+		if tc.again {
+			err = registry.Configure()
+			require.NoError(t, err, "configure again")
+			assert.Equal(t, 2, called, "onstart call count")
+		} else {
+			assert.Equal(t, 1, called, "onstart call count")
+		}
+		assert.Equal(t, tc.want, baseCopy, "data")
+		if tc.sub == "" {
+			assert.Equal(t, map[string]int{}, subcalled, "sub called")
+		} else {
+			assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
+		}
+		for i, spec := range tc.importBools {
+			assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
+		}
+		for i, spec := range tc.importStrings {
+			assert.Equal(t, spec.want, *istring[i], "string "+spec.name)
+		}
+	}
+	if tc.wantExport != nil || tc.exportCmd != "" || tc.exportToo || tc.exportError != "" {
+		exportBase := deepcopy.Copy(tc.base)
+		fs := flag.NewFlagSet("foo", flag.ContinueOnError)
+		if tc.exportDefault != "" {
+			args = append(args, WithDefaultsTag(tc.exportDefault))
+		}
+		err := ExportToFlagSet(fs, "flag", exportBase, args...)
+		if tc.exportError != "" {
+			if assert.NotNil(t, err, "export error") {
+				assert.Contains(t, err.Error(), tc.exportError, "export error")
+			}
+			return
+		} else {
+			require.NoError(t, err, "export flagset")
+		}
+		args := strings.Split(tc.cmd, " ")
+		if tc.exportCmd != "" {
+			args = strings.Split(tc.exportCmd, " ")
+		}
+		require.NoError(t, fs.Parse(args), "parse exported flags")
+		want := tc.want
+		if tc.wantExport != nil {
+			want = tc.wantExport
+		}
+		assert.Equal(t, want, exportBase, "data")
 	}
 }
 

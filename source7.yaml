@@ -1,0 +1,9 @@
+---
+  A:
+    v: foo
+    B:
+      v: bar
+      C:
+        v: baz
+        D:
+          v: bloof
