@@ -22,6 +22,7 @@ Nfigure is a reflective configuration library.  It supports:
 - Multi-stage binding to allow independently-developed libraries to express their configruration needs ahead of program startup
 - Custom type support using [reflectutils.RegisterStringSetter()](https://pkg.go.dev/github.com/muir/reflectutils#RegisterStringSetter).
 - Filling all normal Go types, array, slices, maps, and time.Duration
+- Ability to export flag-based configuration requests to the "flag" module (useful for libraries)
 
 While nfigure has lots of flexibility and many features, using it should be simple.
 
