@@ -499,8 +499,6 @@ func pointerToPointerToPonterToFloat64(f float64) ***float64 {
 	return ppp
 }
 
-var argv0 = os.Args[0]
-
 var usageRE = regexp.MustCompile(`\AUsage: \S+ `)
 
 func TestFlags(t *testing.T) {

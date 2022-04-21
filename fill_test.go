@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/muir/nflex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,7 +53,7 @@ type testDataE struct {
 }
 
 type testDataF struct {
-	V string `nf:"v"`
+	V string `nf:"v" validate:"oneof=foo bar" badmeta:",combine=7" meta:"-"`
 }
 
 var mixedCases = []struct {
@@ -65,7 +66,42 @@ var mixedCases = []struct {
 	files            []string
 	fromRoot         []string
 	registryFromRoot []string
+	validate         bool
+	error            string
 }{
+	{
+		cmd:   "badbool",
+		base:  &struct{ II bool }{II: false},
+		error: "strconv.ParseBool",
+		files: []string{"source.yaml"},
+	},
+	{
+		cmd:      "baduint",
+		base:     &struct{ OO uint }{OO: 0},
+		error:    "strconv.ParseInt",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:      "badint",
+		base:     &struct{ OO int }{OO: 0},
+		error:    "strconv.ParseInt",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:      "badfloat",
+		base:     &struct{ OO float64 }{OO: 0},
+		error:    "strconv.ParseFloat",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:   "badstring",
+		base:  &struct{ MM string }{MM: ""},
+		error: "requested item is not the requested type",
+		files: []string{"source.yaml"},
+	},
 	{
 		cmd:  "empty",
 		base: &testDataA{},
@@ -166,6 +202,36 @@ var mixedCases = []struct {
 		registryFromRoot: []string{"A", "B"},
 		fillers:          "nf",
 		files:            []string{"source7.yaml"},
+		validate:         true,
+	},
+	{
+		cmd:  "meta stops filling",
+		base: &testDataF{},
+		want: &testDataF{
+			V: "",
+		},
+		registryFromRoot: []string{"A", "B"},
+		fillers:          "nf meta",
+		files:            []string{"source7.yaml"},
+	},
+	{
+		cmd:              "validationError",
+		base:             &testDataF{},
+		registryFromRoot: []string{"A"},
+		fromRoot:         []string{"B", "C"},
+		fillers:          "nf",
+		files:            []string{"source7.yaml"},
+		validate:         true,
+		error:            "failed on the 'oneof' tag",
+	},
+	{
+		cmd:              "badMeta",
+		base:             &testDataF{},
+		registryFromRoot: []string{"A"},
+		fromRoot:         []string{"B", "C"},
+		fillers:          "nf badmeta",
+		files:            []string{"source7.yaml"},
+		error:            "strconv.ParseBool",
 	},
 	{
 		cmd: "arrays",
@@ -228,6 +294,7 @@ func TestMetaFirstScalar(t *testing.T) {
 				"flag":    WithFiller("flag", fh),
 				"nf":      WithFiller("nf", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 				"meta":    WithMetaTag("meta"),
+				"badmeta": WithMetaTag("badmeta"),
 				"nfigure": WithFiller("nfigure", nil),
 				"n2":      WithFiller("n2", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
 				"n3":      WithFiller("n3", NewFileFiller(WithUnmarshalOpts(nflex.WithFS(content)))),
@@ -250,6 +317,9 @@ func TestMetaFirstScalar(t *testing.T) {
 			if tc.registryFromRoot != nil {
 				args = append(args, FromRoot(tc.registryFromRoot...))
 			}
+			if tc.validate {
+				args = append(args, WithValidate(validator.New()))
+			}
 
 			registry := NewRegistry(args...)
 			files := []string{"source.yaml", "source2.yaml"}
@@ -267,6 +337,12 @@ func TestMetaFirstScalar(t *testing.T) {
 			require.NoError(t, registry.Request(tc.base, requestArgs...), "request")
 			t.Log("About to Configure")
 			err := registry.Configure()
+			if tc.error != "" {
+				if assert.NotNilf(t, err, "expecting error %s", tc.error) {
+					assert.Contains(t, err.Error(), tc.error, "error")
+				}
+				return
+			}
 			require.NoError(t, err, "configure")
 			var want interface{}
 			var got interface{}

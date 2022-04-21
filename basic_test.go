@@ -81,16 +81,3 @@ func TestBasicDefaul(t *testing.T) {
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 3+7i, testData.C, "C")
 }
-
-func TestEnvArrayPtr(t *testing.T) {
-	require.NoError(t, os.Setenv("X", "382:32"), "set X")
-	var testData struct {
-		X *[]int `env:"X,split=:"`
-	}
-	registry := NewRegistry()
-	require.NoError(t, registry.Request(&testData), "add model")
-	err := registry.Configure()
-	require.NoError(t, err, "configure")
-	want := []int{382, 32}
-	assert.Equal(t, &want, testData.X, "X")
-}
