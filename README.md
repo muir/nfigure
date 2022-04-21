@@ -51,6 +51,7 @@ func createMyLibrary(nreg *nfigure.Registry) *MyLibrary {
 	)
 	return &lib
 }
+```
 
 ## Example: At the program level
 
