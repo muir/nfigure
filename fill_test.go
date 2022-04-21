@@ -70,6 +70,39 @@ var mixedCases = []struct {
 	error            string
 }{
 	{
+		cmd:   "badbool",
+		base:  &struct{ II bool }{II: false},
+		error: "strconv.ParseBool",
+		files: []string{"source.yaml"},
+	},
+	{
+		cmd:      "baduint",
+		base:     &struct{ OO uint }{OO: 0},
+		error:    "strconv.ParseInt",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:      "badint",
+		base:     &struct{ OO int }{OO: 0},
+		error:    "strconv.ParseInt",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:      "badfloat",
+		base:     &struct{ OO float64 }{OO: 0},
+		error:    "strconv.ParseFloat",
+		fromRoot: []string{"MM"},
+		files:    []string{"source.yaml"},
+	},
+	{
+		cmd:   "badstring",
+		base:  &struct{ MM string }{MM: ""},
+		error: "requested item is not the requested type",
+		files: []string{"source.yaml"},
+	},
+	{
 		cmd:  "empty",
 		base: &testDataA{},
 		want: &testDataA{
