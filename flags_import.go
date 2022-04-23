@@ -18,6 +18,22 @@ type hasIsBool interface {
 	IsBoolFlag() bool
 }
 
+// FlagSet is a subset of what flag.FlagSet supports, defined as
+// an interface to lesson the dependency on flag.
+type FlagSet interface {
+	BoolVar(*bool, string, bool, string)
+	StringVar(*string, string, string, string)
+	DurationVar(*time.Duration, string, time.Duration, string)
+	IntVar(*int, string, int, string)
+	Int64Var(*int64, string, int64, string)
+	UintVar(*uint, string, uint, string)
+	Uint64Var(*uint64, string, uint64, string)
+	Float64Var(*float64, string, float64, string)
+	Func(string, string, func(string) error)
+	Parsed() bool
+	VisitAll(func(*flag.Flag))
+}
+
 // ImportFlagSet pulls in flags defined with the standard "flag"
 // package.  This is useful when there are libaries being used
 // that define flags.
@@ -26,7 +42,7 @@ type hasIsBool interface {
 //
 // ImportFlagSet is not the recommended way to use nfigure, but sometimes
 // there is no choice.
-func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
+func ImportFlagSet(fs FlagSet) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		if fs.Parsed() {
 			return commonerrors.ProgrammerError(errors.New("Cannot import FlagSets that have been parsed"))
@@ -106,7 +122,7 @@ func (h *FlagHandler) importFlags() error {
 // will be treated as numerical types.
 //
 // If a flag has multiple aliases, only the first name will be used.
-func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) error {
+func ExportToFlagSet(fs FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) error {
 	h := GoFlagHandler(opts...)
 	err := h.PreWalk(tagName, model)
 	if err != nil {
