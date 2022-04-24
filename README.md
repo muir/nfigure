@@ -148,9 +148,10 @@ import (
 type MyConfig struct {
 	MyField string `flag:"myfield"`
 }
+var myConfig MyConfig
 
 sub init() {
-	err := nfigure.ExportToFlagSet(flag.CommandLine, "flag", &MyConfig)
+	err := nfigure.ExportToFlagSet(flag.CommandLine, "flag", &myConfig)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -181,24 +182,59 @@ way to do this is to have a New function that takes a registry as arguments.
 Separate New() and Start() so that configuation can happen after New() but before Start().
 
 Users of your library can use NewWithRegistry() if they're using nfigure.  For other
-users, they can fill MyConfig by hand or use FillConfigFromCommandline() to populate it
-with command line parsing.
+users, they can fill MyConfig by hand or use "flag" to populate the configuration
 
+#### Library writer boilerplate
 ```go
-func NewWithRegistry(registry *nfigure.Registry) mySelf {
-	var config MyConfig
+import "github.com/muir/nfigure"
+
+func NewWithRegistry(registry *nfigure.Registry) MySelf {
+	var config Config
 	registry.Request(&config)
 	...
 }
 
-func FillConfigFromCommandline() *MyConfig {
-	var config MyConfig
-	registery.Request(&config)
-	return &config
+func NewWithConfig(config *Config) MySelf {
+	...
 }
 
-func NewWithConfig(config MyConfig) mySelf {
+func (m MySelf) Start() {
 	...
+}
+```
+
+### Library user not using nfigure boilerplate:
+
+```go
+import (
+	"flag"
+	"library"
+	"github.com/muir/nfigure"
+)
+
+func main() {
+	var libConfig library.Config
+	nfigure.MustExportToFlagSet(flag.CommandLine, "flag", &libConfig)
+	lib := library.NewWithConfig(libConfig) // config is not used yet
+	flag.Parse()
+	lib.Start() // call to Start must be after config is filled in
+}
+```
+
+#### Library user using nfigure boilerplate:
+
+```go
+import (
+	"flag"
+	"library"
+	"github.com/muir/nfigure"
+)
+
+func main() {
+	registry := nfigure.NewRegistry(WithFiller("flag", GoFlagHandler()))
+	lib := registry.NewWithRegistry(registry)
+	registry.Configure()
+	lib.Start()
 }
 ```
 

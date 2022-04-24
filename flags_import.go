@@ -18,6 +18,22 @@ type hasIsBool interface {
 	IsBoolFlag() bool
 }
 
+// FlagSet is a subset of what flag.FlagSet supports, defined as
+// an interface to lesson the dependency on flag.
+type FlagSet interface {
+	BoolVar(*bool, string, bool, string)
+	StringVar(*string, string, string, string)
+	DurationVar(*time.Duration, string, time.Duration, string)
+	IntVar(*int, string, int, string)
+	Int64Var(*int64, string, int64, string)
+	UintVar(*uint, string, uint, string)
+	Uint64Var(*uint64, string, uint64, string)
+	Float64Var(*float64, string, float64, string)
+	Func(string, string, func(string) error)
+	Parsed() bool
+	VisitAll(func(*flag.Flag))
+}
+
 // ImportFlagSet pulls in flags defined with the standard "flag"
 // package.  This is useful when there are libaries being used
 // that define flags.
@@ -26,7 +42,7 @@ type hasIsBool interface {
 //
 // ImportFlagSet is not the recommended way to use nfigure, but sometimes
 // there is no choice.
-func ImportFlagSet(fs *flag.FlagSet) FlaghandlerOptArg {
+func ImportFlagSet(fs FlagSet) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		if fs.Parsed() {
 			return commonerrors.ProgrammerError(errors.New("Cannot import FlagSets that have been parsed"))
@@ -106,7 +122,7 @@ func (h *FlagHandler) importFlags() error {
 // will be treated as numerical types.
 //
 // If a flag has multiple aliases, only the first name will be used.
-func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) error {
+func ExportToFlagSet(fs FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) error {
 	h := GoFlagHandler(opts...)
 	err := h.PreWalk(tagName, model)
 	if err != nil {
@@ -133,7 +149,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 		v := nonPtr.FieldByIndex(f.Index)
 		tagSet := reflectutils.SplitTag(f.Tag).Set()
 		tag := tagSet.Get(tagName)
-		defaultValue := tagSet.Get(defaultTag)
+		defaultValue, hasDefault := tagSet.Lookup(defaultTag)
 		ref, setterType, nonPointerType, err := parseFlagRef(tag, f.Type)
 		if err != nil {
 			return err
@@ -151,7 +167,9 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 			return vcopy
 		}
 		vt := v.Type()
+		var isPointer bool
 		for vt.Kind() == reflect.Ptr {
+			isPointer = true
 			current := getV
 			getV = func() reflect.Value {
 				v := current()
@@ -176,17 +194,6 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 		switch {
 		case len(ref.Name) == 0:
 			return commonerrors.LibraryError(errors.New("missing name"))
-		case ref.isBool:
-			v := getV()
-			var defaultBool bool
-			if defaultValue.Value != "" {
-				var err error
-				defaultBool, err = strconv.ParseBool(defaultValue.Value)
-				if err != nil {
-					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default bool", defaultTag))
-				}
-			}
-			fs.BoolVar(v.Addr().Interface().(*bool), ref.Name[0], defaultBool, help)
 		case ref.isMap:
 			ks, err := reflectutils.MakeStringSetter(nonPointerType.Key())
 			if err != nil {
@@ -280,6 +287,27 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 				return commonerrors.LibraryError(errors.Errorf("internal error: not expecting %s", v.Type()))
 			}
 
+		case isPointer && !hasDefault:
+			// For pointers without defaults, there is no point in using one of the flagset
+			// specific type functions since those require a default and we don't have a
+			// default.  Using one of them would provide a default when instead, nil is
+			// appropriate.
+			fs.Func(ref.Name[0], help, func(s string) error {
+				v := getV()
+				err := setter(v, s)
+				return commonerrors.UsageError(errors.Wrap(err, s))
+			})
+		case ref.isBool:
+			v := getV()
+			var defaultBool bool
+			if defaultValue.Value != "" {
+				var err error
+				defaultBool, err = strconv.ParseBool(defaultValue.Value)
+				if err != nil {
+					return commonerrors.ProgrammerError(errors.Wrapf(err, "Parse value of %s tag for default bool", defaultTag))
+				}
+			}
+			fs.BoolVar(v.Addr().Interface().(*bool), ref.Name[0], defaultBool, help)
 		case setterType == durationType:
 			v := getV()
 			var defaultDuration time.Duration
@@ -340,7 +368,7 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 			fs.Uint64Var(v.Addr().Interface().(*uint64), ref.Name[0], defaultInt, help)
 		default:
 			fs.Func(ref.Name[0], help, func(s string) error {
-				debug("DSLJDSL:FJSD:LFJSD:LFJSD:LFJSDL:JFDSLJFSD:J:", s)
+				v := getV()
 				err := setter(v, s)
 				return commonerrors.UsageError(errors.Wrap(err, s))
 			})
@@ -353,6 +381,14 @@ func ExportToFlagSet(fs *flag.FlagSet, tagName string, model interface{}, opts .
 	}
 
 	return nil
+}
+
+// MustExportToFlagSet wraps ExportToFlagSet with a panic if the export fails
+func MustExportToFlagSet(fs FlagSet, tagName string, model interface{}, opts ...FlaghandlerOptArg) {
+	err := ExportToFlagSet(fs, tagName, model, opts...)
+	if err != nil {
+		panic(err)
+	}
 }
 
 var durationType = reflect.TypeOf(time.Duration(0))

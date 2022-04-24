@@ -57,6 +57,8 @@ type flagSet6 struct {
 	UI64 uint64        `flag:"ui64flag" default:"40" ui64bad:"forty"`
 	D    time.Duration `flag:"dflag" default:"30m10s" dbad:"thirty min"`
 	C    complex64     `flag:"cflag"`
+	BP   *bool         `flag:"bp"`
+	CP   *complex128   `flag:"cp"`
 }
 
 type importBool struct {
@@ -137,8 +139,10 @@ var cases = []flagTestCase{
 			UI64: 41,
 			B:    false,
 			C:    289 + 8i,
+			BP:   pointer.ToBool(false),
+			CP:   pointer.ToComplex128(6 + 7i),
 		},
-		exportCmd: "-sflag abc -dflag 10m -iflag 11 -i64flag 21 -uiflag 31 -ui64flag 41 -bflag=false -cflag 289+8i",
+		exportCmd: "-sflag abc -dflag 10m -iflag 11 -i64flag 21 -uiflag 31 -ui64flag 41 -bflag=false -cflag 289+8i --bp=false --cp=6+7i",
 	},
 	{
 		base:          &flagSet6{},
