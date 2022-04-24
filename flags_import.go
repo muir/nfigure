@@ -293,6 +293,7 @@ func ExportToFlagSet(fs FlagSet, tagName string, model interface{}, opts ...Flag
 			// default.  Using one of them would provide a default when instead, nil is
 			// appropriate.
 			fs.Func(ref.Name[0], help, func(s string) error {
+				v := getV()
 				err := setter(v, s)
 				return commonerrors.UsageError(errors.Wrap(err, s))
 			})
@@ -367,6 +368,7 @@ func ExportToFlagSet(fs FlagSet, tagName string, model interface{}, opts ...Flag
 			fs.Uint64Var(v.Addr().Interface().(*uint64), ref.Name[0], defaultInt, help)
 		default:
 			fs.Func(ref.Name[0], help, func(s string) error {
+				v := getV()
 				err := setter(v, s)
 				return commonerrors.UsageError(errors.Wrap(err, s))
 			})
