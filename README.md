@@ -71,7 +71,7 @@ type programLevelConfig struct {
 func createMyApp(myLibrary *mylibrary.MyLibrary, nreg *nfigure.Registery) error {
 	// start servers, do not return until time to shut down
 	var config programLevelConfig
-	nreg.Register(&config, "main")
+	nreg.Request(&config, "main")
 	_ = nreg.Configure()
 }
 
