@@ -39,16 +39,17 @@ type myLibraryConfig struct {
 	Field3	[]string  `flag:"field3"`
 }
 
-type MyLibrary btruct {
+type MyLibrary struct {
 	config	myLibraryConfig
 }
 
 func createMyLibrary(nreg *nfigure.Registry) *MyLibrary {
 	lib := MyLibrary{}
-	nreg.Register(&lib.config,
+	nreg.Request(&lib.config,
 		nfigure.Prefix("myLibrary"),
 		nfigure.ConfigFileFrom(`env="MYLIBRARY_CONFIG_FILE" flag:"mylibrary-config"`),
 	)
+	_ = nreg.Configure()
 	return &lib
 }
 ```
@@ -70,7 +71,7 @@ type programLevelConfig struct {
 func createMyApp(myLibrary *mylibrary.MyLibrary, nreg *nfigure.Registery) error {
 	// start servers, do not return until time to shut down
 	var config programLevelConfig
-	nreg.Register(&config, "main")
+	nreg.Request(&config, "main")
 	_ = nreg.Configure()
 }
 
