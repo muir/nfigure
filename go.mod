@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/AlekSi/pointer v1.2.0
-	github.com/go-playground/validator/v10 v10.11.0
+	github.com/go-playground/validator/v10 v10.11.1
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/muir/commonerrors v0.0.2
 	github.com/muir/nflex v0.1.6
