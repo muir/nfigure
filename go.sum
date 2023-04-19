@@ -29,8 +29,8 @@ github.com/muir/commonerrors v0.0.2 h1:vT/rSpbvv1jCRW2FIJUq1+WgwrDLJT/SdRwDXIFGG
 github.com/muir/commonerrors v0.0.2/go.mod h1:y/SeHiWvyBd87GUg3HsojnHETMvm2lF3GrXmTq46FnU=
 github.com/muir/nflex v0.1.6 h1:VMrRW8GyitlDak8Anq2VpRJqsocdO25Z01EtENxuvSQ=
 github.com/muir/nflex v0.1.6/go.mod h1:i02aECygUFKTN0lsjae9mPWFJFASt+KnpWd0kCSIhVk=
-github.com/muir/nject v1.6.0 h1:i6wh1aSE7/71yqxgeuBaG+ApivPOoHkg6yJ5b7ERMsc=
-github.com/muir/nject v1.6.0/go.mod h1:YkPfCewGnkFnr8z+hmIxHZXYPvdRQ+DlDfbq9M2bBng=
+github.com/muir/nject v1.7.1 h1:AtARVsFdG2FidfgKZZjXIZsZydPS4r+STmWxJO6JMmw=
+github.com/muir/nject v1.7.1/go.mod h1:YkPfCewGnkFnr8z+hmIxHZXYPvdRQ+DlDfbq9M2bBng=
 github.com/muir/reflectutils v0.7.0 h1:7ez7OLYTThDQ5kpEpxtOgFvJgtE4E11D6PVTVw+Lwl0=
 github.com/muir/reflectutils v0.7.0/go.mod h1:l8W7iTj6zMdmsWcPfsdnaAYLEuipJ7baVROqpfuonIc=
 github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
