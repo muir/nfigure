@@ -10,7 +10,7 @@ require (
 	github.com/muir/commonerrors v0.0.2
 	github.com/muir/nflex v0.1.6
 	github.com/muir/nject v1.7.1
-	github.com/muir/reflectutils v0.7.0
+	github.com/muir/reflectutils v0.8.0
 	github.com/pkg/errors v0.9.1
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/stretchr/testify v1.8.2

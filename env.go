@@ -24,14 +24,25 @@ type LookupFillerOpt func(*LookupFiller)
 // NewEnvFiller creates a LookupFiller that looks up variables from the environment.
 // NewRegistry includes maps "env" to such a filler.
 //
-// The first word after the tag name is the name of the environment variable.  Also
-// supported is a "split" tag that can be used to specify how to split up a value when
-// filling an array or slice from a single string.  Special values for split are:
+// The first word after the tag name is the name of the environment variable.
+//
+// Options are:
+//
+// "split" tag that can be used to specify how to split up a value when
+// filling an array or slice from a single string. Special values for split are:
 // "none", "comma", "equals".
+//
+// "JSON" tag that specifies that the the string should be decoded as JSON. This
+// overrides other decoding possibilities.
+//
+//	type SubStruct struct {
+//		Foo	     int  `json:"foo"`
+//	}
 //
 //	type MyStruct struct {
 //		WeightFactor float64  `env:"WEIGHT_FACTOR"`
 //		Groups       []string `env:"GROUPS,split=|"`
+//		Foo	     *Foo     `env:",JSON"
 //	}
 func NewEnvFiller(opts ...LookupFillerOpt) Filler {
 	return NewLookupFillerSimple(os.LookupEnv,
@@ -97,6 +108,7 @@ func WrapLookupErrors(f func(error) error) LookupFillerOpt {
 type envTag struct {
 	Variable string `pt:"0"`
 	Split    string `pt:"split"`
+	JSON     bool   `pt:"JSON"`
 }
 
 // Fill is part of the Filler contract.  It is used by Registry.Configure.
@@ -128,6 +140,9 @@ func (e LookupFiller) Fill(
 	var ssa []reflectutils.StringSetterArg
 	if tagData.Split != "" {
 		ssa = append(ssa, reflectutils.WithSplitOn(tagData.Split))
+	}
+	if tagData.JSON {
+		ssa = append(ssa, reflectutils.ForceJSON(true))
 	}
 	setter, err := reflectutils.MakeStringSetter(t, ssa...)
 	if err != nil {
