@@ -47,3 +47,22 @@ func TestEnvArrayPtr3(t *testing.T) {
 	assert.Equal(t, &want, **testData.X, "X")
 }
 
+func TestEnvStruct(t *testing.T) {
+	require.NoError(t, os.Setenv("X", `{"Y":3,"Z":"foo"}`), "set X")
+	type innerStruct struct {
+		Y int
+		Z string
+	}
+	var testData struct {
+		X *innerStruct `env:"X,JSON"`
+	}
+	registry := NewRegistry()
+	require.NoError(t, registry.Request(&testData), "add model")
+	err := registry.Configure()
+	require.NoError(t, err, "configure")
+	want := &innerStruct{
+		Y: 3,
+		Z: "foo",
+	}
+	assert.Equal(t, want, testData.X, "X")
+}
