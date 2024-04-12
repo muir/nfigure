@@ -206,6 +206,12 @@ func (h *FlagHandler) parseFlags(i int) error {
 	return nil
 }
 
+// Remaining returns the arguments that were not consumed from os.Args. The other way
+// to get the remaining arguments is to add an OnStart callback.
+func (h *FlagHandler) Remaining() []string {
+	return h.remainder
+}
+
 // Fill is part of the Filler interface and will be invoked by Registry.Configure().
 //
 // Fill may be called multiple times for the same field: if it's a
