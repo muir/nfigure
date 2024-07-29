@@ -33,3 +33,5 @@ support struct filling for flags with prefix as Recurse
 
 support "content=application/json" for flags/environment variables
 
+
+support CUE (cuelang.org); Jsonnet; GCL; HCL; and TOML.
