@@ -111,3 +111,8 @@ func (r *Request) getPrefix() []string {
 	}
 	return r.prefix
 }
+
+// GetObject returns the configuration object for the Request
+func (r *Request) GetObject() any {
+	return r.object
+}

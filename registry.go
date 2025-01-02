@@ -269,3 +269,12 @@ func (r *Registry) preWalkLocked(request *Request) error {
 	}
 	return nil
 }
+
+// GetRequests returns the requests that have been registered in the Registry.
+func (r *Registry) GetRequests() []*Request {
+	requests := make([]*Request, len(r.requests))
+	for i, req := range r.requests {
+		requests[i] = req
+	}
+	return requests
+}

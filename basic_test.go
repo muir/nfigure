@@ -81,3 +81,19 @@ func TestBasicDefaul(t *testing.T) {
 	require.NoError(t, err, "configure")
 	assert.Equal(t, 3+7i, testData.C, "C")
 }
+
+func TestIntrospection(t *testing.T) {
+	var testDataA struct {
+		C complex128 `default:"3+7i"`
+	}
+	var testDataB struct {
+		I int `default:"4"`
+	}
+	registry := NewRegistry()
+	require.NoError(t, registry.Request(&testDataA), "add model")
+	require.NoError(t, registry.Request(&testDataB), "add model")
+	requests := registry.GetRequests()
+	require.Equal(t, 2, len(requests), "len")
+	require.Equal(t, &testDataA, requests[0].GetObject(), "A")
+	require.Equal(t, &testDataB, requests[1].GetObject(), "B")
+}
