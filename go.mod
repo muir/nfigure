@@ -3,7 +3,6 @@ module github.com/muir/nfigure
 go 1.20
 
 require (
-	github.com/AlekSi/pointer v1.2.0
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/muir/commonerrors v0.0.2

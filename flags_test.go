@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlekSi/pointer"
 	"github.com/mohae/deepcopy"
 	"github.com/muir/commonerrors"
+	"github.com/muir/nfigure/internal/pointer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -139,8 +139,8 @@ var cases = []flagTestCase{
 			UI64: 41,
 			B:    false,
 			C:    289 + 8i,
-			BP:   pointer.ToBool(false),
-			CP:   pointer.ToComplex128(6 + 7i),
+			BP:   pointer.To(false),
+			CP:   pointer.To(6 + 7i),
 		},
 		exportCmd: "-sflag abc -dflag 10m -iflag 11 -i64flag 21 -uiflag 31 -ui64flag 41 -bflag=false -cflag 289+8i --bp=false --cp=6+7i",
 	},
@@ -274,21 +274,21 @@ var cases = []flagTestCase{
 		base: &flagSet3{},
 		cmd:  "--pflag=39",
 		want: &flagSet3{
-			P: pointer.ToInt32(39),
+			P: pointer.To(int32(39)),
 		},
 	},
 	{
 		base: &flagSet3{},
 		cmd:  "-f 99.4",
 		want: &flagSet3{
-			PP: pointerToPointerToPonterToFloat64(99.4),
+			PP: pointer.To(pointer.To(pointer.To(float64(99.4)))),
 		},
 	},
 	{
 		base: &flagSet3{},
 		cmd:  "-p 20 foo -i 10 xy",
 		want: &flagSet3{
-			P: pointer.ToInt32(20),
+			P: pointer.To(int32(20)),
 		},
 		subcommands: map[string]interface{}{
 			"foo": &flagSet1{},
@@ -324,7 +324,7 @@ var cases = []flagTestCase{
 		cmd:     "--ip=7,8",
 		goFlags: true,
 		want: &flagSet4{
-			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+			Ip: []*int{pointer.To(7), pointer.To(8)},
 		},
 	},
 	{
@@ -332,7 +332,7 @@ var cases = []flagTestCase{
 		cmd:     "--ip 7 --ip=8",
 		goFlags: true,
 		want: &flagSet4{
-			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+			Ip: []*int{pointer.To(7), pointer.To(8)},
 		},
 	},
 	{
@@ -340,7 +340,7 @@ var cases = []flagTestCase{
 		cmd:     "--ip 7,8",
 		goFlags: true,
 		want: &flagSet4{
-			Ip: []*int{pointer.ToInt(7), pointer.ToInt(8)},
+			Ip: []*int{pointer.To(7), pointer.To(8)},
 		},
 	},
 	{
@@ -395,7 +395,7 @@ var cases = []flagTestCase{
 			WithHelpText("this is additional help text"),
 		},
 		want: &flagSet3{
-			P: pointer.ToInt32(20),
+			P: pointer.To(int32(20)),
 		},
 		subcommands: map[string]interface{}{
 			"foo": &flagSet1{},
@@ -494,13 +494,6 @@ var cases = []flagTestCase{
 		cmd:  "--no-foo --baz --beta=def",
 		want: &flagSet3{},
 	},
-}
-
-func pointerToPointerToPonterToFloat64(f float64) ***float64 {
-	p := &f
-	pp := &p
-	ppp := &pp
-	return ppp
 }
 
 var usageRE = regexp.MustCompile(`\AUsage: \S+ `)
