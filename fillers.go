@@ -1,7 +1,7 @@
 package nfigure
 
 import (
-	"github.com/AlekSi/pointer"
+	"github.com/muir/nfigure/internal/pointer"
 	"github.com/muir/reflectutils"
 )
 
@@ -120,7 +120,7 @@ func (f *fillerCollection) pairs(tagSet reflectutils.TagSet, meta metaFields) []
 			debug("fillers, no filler (no pair) for", tag.Tag)
 		}
 	}
-	if pointer.GetBool(meta.First) {
+	if pointer.Value(meta.First) {
 		for _, tag := range tagSet.Tags {
 			p(tag)
 		}

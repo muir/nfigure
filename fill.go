@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/AlekSi/pointer"
 	"github.com/muir/commonerrors"
+	"github.com/muir/nfigure/internal/pointer"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
@@ -109,8 +109,8 @@ func (f *fillerCollection) Len(
 	pairs := f.pairs(x.tags, x.meta)
 	debugf("fill: Len: %s pairs: %+v", x.name, pairs)
 	lengths := make([]int, len(pairs))
-	combine := pointer.GetBool(x.meta.Combine)
-	first := pointer.GetBool(x.meta.First)
+	combine := pointer.Value(x.meta.Combine)
+	first := pointer.Value(x.meta.First)
 	for i, fp := range pairs {
 		canLen, ok := fp.Filler.(CanLenFiller)
 		if !ok {
@@ -155,8 +155,8 @@ func (f *fillerCollection) Len(
 func (f *fillerCollection) Keys(t reflect.Type, tagSet reflectutils.TagSet, meta metaFields) []string {
 	var all []string
 	seen := make(map[string]struct{})
-	first := pointer.GetBool(meta.First)
-	combine := pointer.GetBool(meta.Combine)
+	first := pointer.Value(meta.First)
+	combine := pointer.Value(meta.Combine)
 	for _, fp := range f.pairs(tagSet, meta) {
 		canKey, ok := fp.Filler.(CanKeysFiller)
 		if !ok {
@@ -218,18 +218,18 @@ func (x fillData) fillStruct(t reflect.Type, v reflect.Value) (bool, error) {
 		tags := reflectutils.SplitTag(f.Tag).Set()
 		debug("fill: field", f.Name, f.Type, f.Tag)
 		meta := metaFields{
-			First:   pointer.ToBool(true),
-			Combine: pointer.ToBool(true),
+			First:   pointer.To(true),
+			Combine: pointer.To(true),
 		}
 		err := tags.Get(x.r.metaTag).Fill(&meta)
 		if err != nil {
 			return false, commonerrors.ProgrammerError(errors.Wrap(err, f.Name))
 		}
 		if meta.First == nil {
-			meta.First = pointer.ToBool(true)
+			meta.First = pointer.To(true)
 		}
 		if meta.Combine == nil {
-			meta.Combine = pointer.ToBool(true)
+			meta.Combine = pointer.To(true)
 		}
 		debugf("fill: parse '%s'(%s), tag '%s' -> {name: %s, first:%v, combine:%v, desc:%v}\n", f.Tag, x.r.registry.metaTag, tags.Get(x.r.registry.metaTag), meta.Name, *meta.First, *meta.Combine, meta.Desc)
 		filled, err := fillData{
@@ -298,8 +298,8 @@ func (x fillData) fillField(t reflect.Type, v reflect.Value) (bool, error) {
 	}
 
 	var anyFilled bool
-	combine := pointer.GetBool(x.meta.Combine)
-	first := pointer.GetBool(x.meta.First)
+	combine := pointer.Value(x.meta.Combine)
+	first := pointer.Value(x.meta.First)
 	debug("fill: pairs next,", x.name, "first:", first, "combine:", combine)
 	for _, fp := range x.fillers.pairs(x.tags, x.meta) {
 		filled, err := fp.Filler.Fill(t, v, fp.Tag, first, combine)

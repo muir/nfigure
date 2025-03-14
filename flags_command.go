@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/AlekSi/pointer"
 	"github.com/muir/commonerrors"
+	"github.com/muir/nfigure/internal/pointer"
 	"github.com/muir/nject/v2"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
@@ -384,7 +384,7 @@ func (h *FlagHandler) addHelpFlagAndCommand(forceSub bool) error {
 		}
 		for key, sub := range h.subcommands {
 			if sub.helpText == nil {
-				sub.helpText = pointer.ToString("")
+				sub.helpText = pointer.To("")
 			}
 			debug("adding help to sub", key)
 			err := sub.addHelpFlagAndCommand(true)
