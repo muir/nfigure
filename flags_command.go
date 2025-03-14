@@ -11,7 +11,7 @@ import (
 
 	"github.com/AlekSi/pointer"
 	"github.com/muir/commonerrors"
-	"github.com/muir/nject"
+	"github.com/muir/nject/v2"
 	"github.com/muir/reflectutils"
 	"github.com/pkg/errors"
 )
@@ -332,6 +332,7 @@ func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 // tag is "default".  Default values are only available for some kinds of
 // flags because the "flag" package does not support defaults on flags that
 // are defined with functions.  Defaults are available for:
+//
 //	bool
 //	duration
 //	float64
