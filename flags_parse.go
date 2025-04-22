@@ -426,7 +426,7 @@ func parseFlagRef(tag reflectutils.Tag, t reflect.Type) (flagRef, reflect.Type, 
 func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 	v := reflect.ValueOf(model)
 	var walkErr error
-	h.debug("flags: beging PreWalk")
+	h.debug("beginning PreWalk")
 	reflectutils.WalkStructElements(v.Type(), func(f reflect.StructField) bool {
 		h.debugf("walk %s %s %s", f.Name, f.Type, f.Tag)
 		tag := reflectutils.SplitTag(f.Tag).Set().Get(tagName)
@@ -480,7 +480,7 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 			}
 			if existing, ok := (*m)[n]; ok {
 				// hmm, this flag is defined more than once!
-				h.debugf("prewalk existing flag regsitration")
+				h.debug("prewalk existing flag registration")
 				if existing.flagTagComparable != ref.flagTagComparable || existing.flagRefComparable != ref.flagRefComparable {
 					walkErr = commonerrors.ProgrammerError(errors.Errorf("multiple registrations of %s:%s are not compatible with each other: %s/%s/%s vs %s/%s/%s",
 						tagName, n,
@@ -491,7 +491,7 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 				existing.isBool = existing.isBool && ref.isBool
 				existing.setters[sk] = setter
 			} else {
-				h.debugf("prewalk new flag registration")
+				h.debug("prewalk new flag registration")
 				ref.setters = map[setterKey]func(reflect.Value, string) error{
 					sk: setter,
 				}
