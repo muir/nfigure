@@ -311,6 +311,32 @@ var cases = []flagTestCase{
 	},
 	{
 		base:      &flagSet4{},
+		cmd:       "-sa fooo baar baaz",
+		exportCmd: "-sa fooo -sa baar",
+		goFlags:   true,
+		want: &flagSet4{
+			SA: [2]string{"fooo", "baar"},
+		},
+		error: "unexpected positional",
+		additionalArgs: []FlaghandlerOptArg{
+			NoPositional(),
+		},
+	},
+	{
+		base:      &flagSet4{},
+		cmd:       "-sa fooo baar -- baaz",
+		exportCmd: "-sa fooo -sa baar",
+		goFlags:   true,
+		want: &flagSet4{
+			SA: [2]string{"fooo", "baar"},
+		},
+		error: "unexpected positional",
+		additionalArgs: []FlaghandlerOptArg{
+			NoPositional(),
+		},
+	},
+	{
+		base:      &flagSet4{},
 		cmd:       "-s x,x -s y -s z z",
 		exportToo: true,
 		goFlags:   true,

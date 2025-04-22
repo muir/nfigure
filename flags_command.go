@@ -78,7 +78,11 @@ var testOutput string
 //		DebugLevel int `flag:"d,counter"`
 //	}
 //
-// FlagHandler implements the Filler interface
+// # FlagHandler implements the Filler interface
+//
+// Flags processing ends when a non-flag is encountered or when "--" is found.
+// If it is an error for flags processing to finish while there are still arguments
+// left, use the ExpectNoRemaining option.
 type FlagHandler struct {
 	fhInheritable
 	Parent             *FlagHandler // set only for subcommands
@@ -103,6 +107,7 @@ type FlagHandler struct {
 	imported           []*flagRef
 	defaultTag         string
 	debugLogger        fullLogger
+	noPositional       bool
 }
 
 var (
@@ -332,7 +337,8 @@ func OnActivate(chain ...interface{}) FlaghandlerOptArg {
 // OnStart is called at the end of configuration.  It does not need to return until
 // the program terminates (assuming there are no other Fillers in use that take
 // action during ConfigureComplete and also assuming that there isn't an OnStart in
-// at the subommmand level also).
+// at the subommmand level also). The argument(s) to OnStart are passed to
+// [github.com/muir/nject] as an injection chain.
 func OnStart(chain ...interface{}) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		return nject.Sequence("default-error-responder",
@@ -358,6 +364,16 @@ func WithHelpText(helpText string) FlaghandlerOptArg {
 func PositionalHelp(positionalHelp string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.positionalHelp = positionalHelp
+		return nil
+	}
+}
+
+// NoPositional indicates that after flags are parsed, there are no
+// positional arguments expected. If there are left over arguments, it
+// is an error.
+func NoPositional() FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.noPositional = true
 		return nil
 	}
 }

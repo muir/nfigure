@@ -131,6 +131,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 		if f == "--" {
 			remainder = os.Args[i+1:]
 			h.debugf("found -- remaining flags (%d/%d) are positional", i, len(os.Args))
+			if len(remainder) > 0 && h.noPositional {
+				return commonerrors.UsageError(errors.Errorf("flags parsing completed, with --, leaving %d unexpected positional arguments: %v",
+					len(remainder), remainder))
+			}
 			break
 		}
 		if h.doubleDash && strings.HasPrefix(f, "--") {
@@ -196,6 +200,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 		}
 		remainder = os.Args[i:]
 		h.debugf("at %d, remainder is %v", i, remainder)
+		if len(remainder) > 0 && h.noPositional {
+			return commonerrors.UsageError(errors.Errorf("flags parsing completed leaving %d unexpected positional arguments: %v",
+				len(remainder), remainder))
+		}
 		break
 	}
 	if h.helpText != nil && len(h.longFlags["help"].values) != 0 {
