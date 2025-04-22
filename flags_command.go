@@ -301,6 +301,7 @@ func (log sprintfLog) Log(a ...any) {
 	log.Logf("%s", fmt.Sprint(a...))
 }
 
+// Debugging turns on lots of debug output.
 func Debugging(logger Logger) FlaghandlerOptArg {
 	var full fullLogger
 	if fl, ok := logger.(fullLogger); ok {
