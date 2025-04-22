@@ -56,7 +56,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			if len(kv) != 2 {
 				return commonerrors.UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
 			}
-			debugf("parse map split %s = %s", kv[0], kv[1])
+			h.debugf("parse map split %s = %s", kv[0], kv[1])
 			ref.keys = append(ref.keys, kv[0])
 			ref.values = append(ref.values, kv[1])
 			ref.used = append(ref.used, withDash)
@@ -473,7 +473,7 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 				m = &h.mapFlags
 				h.debugf("prewalk nope, register mapflag")
 			}
-			h.debugf("prewalk registring %s %s %s", tag.Value, setterType, ref.Split)
+			h.debugf("prewalk registering %s %s %s", tag.Value, setterType, ref.Split)
 			sk := setterKey{
 				typ:   setterType,
 				split: ref.Split,
@@ -491,7 +491,7 @@ func (h *FlagHandler) PreWalk(tagName string, model interface{}) error {
 				existing.isBool = existing.isBool && ref.isBool
 				existing.setters[sk] = setter
 			} else {
-				h.debugf("prewalk new flag regsitration")
+				h.debugf("prewalk new flag registration")
 				ref.setters = map[setterKey]func(reflect.Value, string) error{
 					sk: setter,
 				}
