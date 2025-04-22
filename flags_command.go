@@ -102,6 +102,7 @@ type FlagHandler struct {
 	alreadyParsed      bool
 	imported           []*flagRef
 	defaultTag         string
+	debugLogger        Logger
 }
 
 var (
@@ -281,6 +282,18 @@ func (h *FlagHandler) ConfigureComplete() error {
 
 // FlaghandlerOptArg are options for flaghandlers
 type FlaghandlerOptArg func(*FlagHandler) error
+
+type Logger interface {
+	Logf(string, ...any)
+	Log(...any)
+}
+
+func Debugging(logger Logger) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.debugLogger = logger
+		return nil
+	}
+}
 
 // OnActivate is called before flags are parsed.  It's mostly for subcommands.  The
 // callback will be invoked as soon as it is known that the subcommand is being
@@ -769,5 +782,24 @@ func getCategory(name string, ref flagRef) optCategory {
 		return optionOpt
 	default:
 		return parameterOpt
+	}
+}
+
+func (h *FlagHandler) debug(a ...any) {
+	if debugging {
+		m := append([]any{"flags:"}, a...)
+		debug(m...)
+	}
+	if h.debugLogger != nil {
+		h.debugLogger.Log(a...)
+	}
+}
+
+func (h *FlagHandler) debugf(format string, a ...any) {
+	if debugging {
+		debugf("flags: "+format, a...)
+	}
+	if h.debugLogger != nil {
+		h.debugLogger.Logf(format, a...)
 	}
 }

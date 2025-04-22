@@ -67,8 +67,10 @@ func ImportFlagSet(fs FlagSet) FlaghandlerOptArg {
 				err = commonerrors.ProgrammerError(errors.New("Invalid flag in FlagSet with no Name"))
 			case 1:
 				h.shortFlags[f.Name] = ref
+				h.debug("imported base flag -%s", f.Name)
 			default:
 				h.longFlags[f.Name] = ref
+				h.debug("imported base flag --%s", f.Name)
 			}
 			h.imported = append(h.imported, ref)
 		})
