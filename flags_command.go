@@ -102,7 +102,7 @@ type FlagHandler struct {
 	alreadyParsed      bool
 	imported           []*flagRef
 	defaultTag         string
-	debugLogger        Logger
+	debugLogger        fullLogger
 }
 
 var (
@@ -285,12 +285,33 @@ type FlaghandlerOptArg func(*FlagHandler) error
 
 type Logger interface {
 	Logf(string, ...any)
+	// optional: Log(...any)
+}
+
+type fullLogger interface {
+	Logger
 	Log(...any)
 }
 
+type sprintfLog struct {
+	Logger
+}
+
+func (log sprintfLog) Log(a ...any) {
+	log.Logf("%s", fmt.Sprint(a...))
+}
+
 func Debugging(logger Logger) FlaghandlerOptArg {
+	var full fullLogger
+	if fl, ok := logger.(fullLogger); ok {
+		full = fl
+	} else {
+		full = sprintfLog{
+			Logger: logger,
+		}
+	}
 	return func(h *FlagHandler) error {
-		h.debugLogger = logger
+		h.debugLogger = full
 		return nil
 	}
 }
