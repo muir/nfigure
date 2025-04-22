@@ -195,7 +195,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 			return sub.parseFlags(i + 1)
 		}
 		remainder = os.Args[i:]
-		h.debugf("at %d, remainder is %v", remainder)
+		h.debugf("at %d, remainder is %v", i, remainder)
 		break
 	}
 	if h.helpText != nil && len(h.longFlags["help"].values) != 0 {
