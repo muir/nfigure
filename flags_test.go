@@ -130,6 +130,20 @@ var cases = []flagTestCase{
 	},
 	{
 		base: &flagSet6{},
+		name: "duplicate flag",
+		wantExport: &flagSet6{
+			S:    "abc",
+			D:    30*time.Minute + 10*time.Second,
+			I:    10,
+			I64:  20,
+			UI:   30,
+			UI64: 40,
+			B:    true,
+		},
+		exportCmd: "-sflag ignored -sflag abc",
+	},
+	{
+		base: &flagSet6{},
 		wantExport: &flagSet6{
 			S:    "abc",
 			D:    10 * time.Minute,
@@ -670,4 +684,18 @@ func deindent(s string) string {
 	}
 	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(m[1]))
 	return re.ReplaceAllLiteralString(s, "")
+}
+
+func TestReproduceFlagsPanic(t *testing.T) {
+	t.Log("this test reproduces a problem that caused a panic")
+	type options struct {
+		RealmSecretsPath string `flag:"secrets" default:"/var/secrets/secrets.json" help:"Path to a JSON file containing the secrets"`
+	}
+	var opts options
+	os.Args = append([]string{os.Args[0]}, "--secrets", "/realm/secrets.json", "--secrets", "/x/y")
+	registry := NewRegistry(WithFiller("flag", PosixFlagHandler()))
+	err := registry.Request(&opts)
+	require.NoError(t, err)
+	err = registry.Configure()
+	require.NoError(t, err)
 }

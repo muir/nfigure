@@ -335,7 +335,7 @@ func (h *FlagHandler) Fill(
 			v.Set(m)
 			return true, nil
 		}
-		if ref.isSlice && ref.Split == "none" || len(ref.values) > 1 {
+		if ref.isSlice && (ref.Split == "none" || len(ref.values) > 1) {
 			if len(ref.values) == 0 {
 				return false, nil
 			}
