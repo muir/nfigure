@@ -14,6 +14,34 @@ import (
 	"github.com/pkg/errors"
 )
 
+// shouldIgnoreFlag checks if a flag should be silently ignored
+func (h *FlagHandler) shouldIgnoreFlag(flagName string) bool {
+	if h.ignorableFlags == nil {
+		return false
+	}
+	_, exists := h.ignorableFlags[flagName]
+	return exists
+}
+
+// ignoredFlagTakesArgument checks if an ignored flag takes an argument
+func (h *FlagHandler) ignoredFlagTakesArgument(flagName string) bool {
+	if h.ignorableFlags == nil {
+		return false
+	}
+	takesArg, exists := h.ignorableFlags[flagName]
+	return exists && takesArg
+}
+
+// skipNextArgumentIfNotFlag skips the next argument if it doesn't look like a flag
+// This is used when we ignore a flag that might have an argument following it
+func (h *FlagHandler) skipNextArgumentIfNotFlag(currentIndex int, flagName string) int {
+	if h.ignoredFlagTakesArgument(flagName) && currentIndex+1 < len(os.Args) && !strings.HasPrefix(os.Args[currentIndex+1], "-") {
+		h.debugf("at %d, skipping argument %s for ignored flag %s", currentIndex+1, os.Args[currentIndex+1], flagName)
+		return currentIndex + 1 // skip the next argument
+	}
+	return currentIndex
+}
+
 func (h *FlagHandler) parseFlags(i int) error {
 	h.debug("beginning parse")
 	if h.alreadyParsed {
@@ -78,6 +106,9 @@ func (h *FlagHandler) parseFlags(i int) error {
 	}
 
 	handleShort := func(flag string, inErr string) error {
+		if h.shouldIgnoreFlag(flag) {
+			return nil // silently ignore this flag
+		}
 		ref, ok := h.shortFlags[flag]
 		if !ok {
 			return commonerrors.UsageError(errors.Errorf("Flag %s not defined", inErr))
@@ -111,6 +142,9 @@ func (h *FlagHandler) parseFlags(i int) error {
 					return false, commonerrors.LibraryError(errors.New("internal error: expected to find mapFlag"))
 				}
 			}
+			if h.shouldIgnoreFlag(flag) {
+				return true, nil // silently ignore this flag
+			}
 			return false, commonerrors.UsageError(errors.Errorf("Flag %s%s not defined", dash, flag))
 		}
 		if ref, ok := h.longFlags[noDash]; ok {
@@ -122,6 +156,9 @@ func (h *FlagHandler) parseFlags(i int) error {
 				ref.used = append(ref.used, dash+noDash)
 				return true, nil
 			}
+		}
+		if h.shouldIgnoreFlag(noDash) {
+			return true, nil // silently ignore this flag
 		}
 		return false, commonerrors.UsageError(errors.Errorf("Flag %s%s not defined", dash, noDash))
 	}
@@ -138,13 +175,18 @@ func (h *FlagHandler) parseFlags(i int) error {
 			break
 		}
 		if h.doubleDash && strings.HasPrefix(f, "--") {
-			handled, err := longFlag("--", f[2:])
+			flagName := f[2:]
+			handled, err := longFlag("--", flagName)
 			if err != nil {
 				h.debugf("at %d, failed long flag %s", i, f)
 				return err
 			}
 			if handled {
 				h.debugf("at %d, long flag %s handled", i, f)
+				// If the flag was ignored, skip the next argument if it's not a flag
+				if h.shouldIgnoreFlag(flagName) {
+					i = h.skipNextArgumentIfNotFlag(i, flagName)
+				}
 				continue
 			}
 		}
@@ -172,9 +214,14 @@ func (h *FlagHandler) parseFlags(i int) error {
 				}
 				continue
 			}
-			err := handleShort(f[1:], f)
+			flagName := f[1:]
+			err := handleShort(flagName, f)
 			if err != nil {
 				return err
+			}
+			// If the flag was ignored, skip the next argument if it's not a flag
+			if h.shouldIgnoreFlag(flagName) {
+				i = h.skipNextArgumentIfNotFlag(i, flagName)
 			}
 			continue
 		}
@@ -285,7 +332,6 @@ func (h *FlagHandler) Fill(
 		}
 		if ref.IsCounter {
 			var count int
-			var err error
 			for i, value := range ref.values {
 				if value == "" {
 					count++
@@ -297,11 +343,8 @@ func (h *FlagHandler) Fill(
 				}
 				count = replacement
 			}
-			if err != nil {
-				return false, err
-			}
 			value := strconv.Itoa(count)
-			err = setter(v, value)
+			err := setter(v, value)
 			if err != nil {
 				return false, err
 			}

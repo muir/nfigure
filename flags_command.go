@@ -117,13 +117,14 @@ var (
 )
 
 type fhInheritable struct {
-	tagName      string    //nolint:structcheck
-	registry     *Registry //nolint:structcheck
-	doubleDash   bool
-	singleDash   bool
-	combineShort bool
-	negativeNo   bool
-	helpTag      string
+	tagName        string    //nolint:structcheck
+	registry       *Registry //nolint:structcheck
+	doubleDash     bool
+	singleDash     bool
+	combineShort   bool
+	negativeNo     bool
+	helpTag        string
+	ignorableFlags map[string]bool
 }
 
 type flagTag struct {
@@ -411,6 +412,51 @@ func WithDefaultsTag(defaultTag string) FlaghandlerOptArg {
 func FlagHelpTag(helpTagName string) FlaghandlerOptArg {
 	return func(h *FlagHandler) error {
 		h.helpTag = helpTagName
+		return nil
+	}
+}
+
+// IgnoreSpecificFlagsFromEnv can be used to set up nfigure's flag parser to be able to
+// have an older binary ignore newly-introduced flags or a newer binary ignore deprecated
+// flags. The flags to ignore are specified in an environment variable and should be comma-separated.
+// You can specify the flag behavior by appending :type:
+//
+//	:bool   - Boolean/counter flags (no arguments): --verbose, --debug
+//	:value  - Flags that take one argument: --output file, --config path
+//
+// If no type is specified, :bool is assumed.
+// Examples: "debug,config:value,verbose"
+//
+// LIMITATION: This only handles simple cases. For complex flags (slices, maps),
+// consider using the flag=value syntax (--flag=value) to avoid ambiguity.
+// This provides runtime configuration without code changes.
+func IgnoreSpecificFlagsFromEnv(envVar string) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		if h.ignorableFlags == nil {
+			h.ignorableFlags = make(map[string]bool)
+		}
+
+		envValue := os.Getenv(envVar)
+		if envValue != "" {
+			flags := strings.Split(envValue, ",")
+			for _, flagSpec := range flags {
+				flagSpec = strings.TrimSpace(flagSpec)
+				if flagSpec != "" {
+					// Parse flag:type format
+					parts := strings.SplitN(flagSpec, ":", 2)
+					flagName := parts[0]
+					flagType := "bool" // default to bool type
+
+					if len(parts) > 1 {
+						flagType = parts[1]
+					}
+
+					// Store both the flag name and whether it takes an argument
+					// bool type includes counters since they both take no arguments
+					h.ignorableFlags[flagName] = (flagType != "bool")
+				}
+			}
+		}
 		return nil
 	}
 }

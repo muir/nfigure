@@ -97,3 +97,80 @@ func TestIntrospection(t *testing.T) {
 	require.Equal(t, &testDataA, requests[0].GetObject(), "A")
 	require.Equal(t, &testDataB, requests[1].GetObject(), "B")
 }
+
+func TestThreeArgumentsTwoFields(t *testing.T) {
+	t.Setenv("IGNORE_FLAGS", "zero:value")
+
+	var options struct {
+		First  int `flag:"first f"`
+		Second int `flag:"second s"`
+	}
+
+	// Set up os.Args with three arguments - the first is ignored, then two flags for the struct
+	os.Args = strings.Split("program --zero 0 --first 10 --second 20", " ")
+
+	registry := NewRegistry(
+		WithFiller(
+			"flag", PosixFlagHandler(
+				WithHelpText(""),
+				IgnoreSpecificFlagsFromEnv("IGNORE_FLAGS"))))
+
+	_ = registry.Request(&options)
+	err := registry.Configure()
+	require.NoError(t, err, "configure")
+
+	// Verify the struct fields were populated correctly
+	assert.Equal(t, 10, options.First, "First field")
+	assert.Equal(t, 20, options.Second, "Second field")
+}
+
+func TestIgnoredBooleanFlag(t *testing.T) {
+	t.Setenv("IGNORE_BOOL_FLAGS", "verbose,debug:value")
+
+	var options struct {
+		Output string `flag:"output o"`
+	}
+
+	// Test that boolean ignored flags don't consume the next argument
+	os.Args = strings.Split("program --verbose --output result", " ")
+
+	registry := NewRegistry(
+		WithFiller(
+			"flag", PosixFlagHandler(
+				WithHelpText(""),
+				IgnoreSpecificFlagsFromEnv("IGNORE_BOOL_FLAGS"))))
+
+	_ = registry.Request(&options)
+	err := registry.Configure()
+	require.NoError(t, err, "configure")
+
+	// Verify that --output got "result", not "--output"
+	assert.Equal(t, "result", options.Output, "Output field should be set correctly")
+}
+
+func TestIgnoredFlagTypes(t *testing.T) {
+	t.Setenv("IGNORE_SIMPLE_TYPES", "verbose,debug:bool,config:value")
+
+	var options struct {
+		Output string `flag:"output o"`
+		Name   string `flag:"name n"`
+	}
+
+	// Test command with ignored flags before real flags
+	// Note: complex flags like maps/slices should use --flag=value syntax for clarity
+	os.Args = strings.Split("program --verbose --debug --config /path/file --output result --name test", " ")
+
+	registry := NewRegistry(
+		WithFiller(
+			"flag", PosixFlagHandler(
+				WithHelpText(""),
+				IgnoreSpecificFlagsFromEnv("IGNORE_SIMPLE_TYPES"))))
+
+	_ = registry.Request(&options)
+	err := registry.Configure()
+	require.NoError(t, err, "configure")
+
+	// Verify that the real flags were processed correctly
+	assert.Equal(t, "result", options.Output, "Output field should be set correctly")
+	assert.Equal(t, "test", options.Name, "Name field should be set correctly")
+}
