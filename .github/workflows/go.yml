@@ -1,4 +1,8 @@
-on: [push]
+on: 
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
 name: Unit Tests
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
@@ -12,15 +16,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@2e205a28d0e1da00c5f53b161f4067b052c61f34
+      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a
       with:
         egress-policy: audit # TODO: change to 'egress-policy: block' after couple of runs
 
     - name: Install Go
-      uses: actions/setup-go@bfdd3570ce990073878bf10f6b2d79082de49492
+      uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00
       with:
         go-version: ${{ matrix.go-version }}
     - name: Checkout code
-      uses: actions/checkout@e2f20e631ae6d7dd3b768f56a5d2af784dd54791
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
     - name: Test
       run: go test ./...
