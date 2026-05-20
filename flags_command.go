@@ -17,8 +17,10 @@ import (
 )
 
 // These are used for testing only
-var testMode bool
-var testOutput string
+var (
+	testMode   bool
+	testOutput string
+)
 
 // General calling order....
 //
@@ -108,6 +110,7 @@ type FlagHandler struct {
 	defaultTag         string
 	debugLogger        fullLogger
 	noPositional       bool
+	args               []string
 }
 
 var (
@@ -225,6 +228,7 @@ func GoFlagHandler(opts ...FlaghandlerOptArg) *FlagHandler {
 }
 
 func (h *FlagHandler) init() {
+	h.args = os.Args
 	h.subcommands = make(map[string]*FlagHandler)
 	h.longFlags = make(map[string]*flagRef)
 	h.shortFlags = make(map[string]*flagRef)
@@ -332,6 +336,15 @@ func OnActivate(chain ...interface{}) FlaghandlerOptArg {
 			nject.Provide("default-error", func() nject.TerminalError {
 				return nil
 			})).Append("on-activate", chain...).Bind(&h.onActivate, nil)
+	}
+}
+
+// WithArgs overrides where the args to parse comes from. Without WithArgs,
+// os.Args[1:] is used. There is no current override for os.Args[0].
+func WithArgs(osArgs []string) FlaghandlerOptArg {
+	return func(h *FlagHandler) error {
+		h.args = append([]string{h.args[0]}, osArgs...)
+		return nil
 	}
 }
 
@@ -771,7 +784,7 @@ func (h *FlagHandler) Usage() string {
 	}
 
 	usage := make([]string, 0, len(h.rawData)*2+10+len(h.subcommands)*2)
-	usage = append(usage, "Usage: "+os.Args[0])
+	usage = append(usage, "Usage: "+h.args[0])
 
 	switch len(optional[flagOpt]) {
 	case 0:
