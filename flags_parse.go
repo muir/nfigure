@@ -35,8 +35,8 @@ func (h *FlagHandler) ignoredFlagTakesArgument(flagName string) bool {
 // skipNextArgumentIfNotFlag skips the next argument if it doesn't look like a flag
 // This is used when we ignore a flag that might have an argument following it
 func (h *FlagHandler) skipNextArgumentIfNotFlag(currentIndex int, flagName string) int {
-	if h.ignoredFlagTakesArgument(flagName) && currentIndex+1 < len(os.Args) && !strings.HasPrefix(os.Args[currentIndex+1], "-") {
-		h.debugf("at %d, skipping argument %s for ignored flag %s", currentIndex+1, os.Args[currentIndex+1], flagName)
+	if h.ignoredFlagTakesArgument(flagName) && currentIndex+1 < len(h.args) && !strings.HasPrefix(h.args[currentIndex+1], "-") {
+		h.debugf("at %d, skipping argument %s for ignored flag %s", currentIndex+1, h.args[currentIndex+1], flagName)
 		return currentIndex + 1 // skip the next argument
 	}
 	return currentIndex
@@ -76,11 +76,11 @@ func (h *FlagHandler) parseFlags(i int) error {
 			ref.values = append(ref.values, "")
 			ref.used = append(ref.used, withDash)
 		case ref.isMap:
-			if i+1 >= len(os.Args) {
+			if i+1 >= len(h.args) {
 				return commonerrors.UsageError(errors.Errorf("Expecting a positional argument after %s, none is available", inErr))
 			}
 			i++
-			kv := strings.SplitN(os.Args[i], ref.Split, 2)
+			kv := strings.SplitN(h.args[i], ref.Split, 2)
 			if len(kv) != 2 {
 				return commonerrors.UsageError(errors.Errorf("Expecting key%svalue after %s but didn't find '%s'", ref.Split, inErr, ref.Split))
 			}
@@ -93,12 +93,12 @@ func (h *FlagHandler) parseFlags(i int) error {
 			if ref.explode != 0 {
 				count = ref.explode
 			}
-			if i+count >= len(os.Args) {
+			if i+count >= len(h.args) {
 				return commonerrors.UsageError(errors.Errorf("Expecting %d positional arguments after %s, but only %d are available",
-					count, inErr, len(os.Args)-i-1))
+					count, inErr, len(h.args)-i-1))
 			}
 			i++
-			ref.values = append(ref.values, os.Args[i:i+count]...)
+			ref.values = append(ref.values, h.args[i:i+count]...)
 			ref.used = append(ref.used, repeatString(withDash, count)...)
 			i += count - 1
 		}
@@ -163,11 +163,11 @@ func (h *FlagHandler) parseFlags(i int) error {
 		return false, commonerrors.UsageError(errors.Errorf("Flag %s%s not defined", dash, noDash))
 	}
 
-	for ; i < len(os.Args); i++ {
-		f := os.Args[i]
+	for ; i < len(h.args); i++ {
+		f := h.args[i]
 		if f == "--" {
-			remainder = os.Args[i+1:]
-			h.debugf("found -- remaining flags (%d/%d) are positional", i, len(os.Args))
+			remainder = h.args[i+1:]
+			h.debugf("found -- remaining flags (%d/%d) are positional", i, len(h.args))
 			if len(remainder) > 0 && h.noPositional {
 				return commonerrors.UsageError(errors.Errorf("flags parsing completed, with --, leaving %d unexpected positional arguments: %v",
 					len(remainder), remainder))
@@ -243,9 +243,10 @@ func (h *FlagHandler) parseFlags(i int) error {
 					return err
 				}
 			}
+			sub.args = h.args
 			return sub.parseFlags(i + 1)
 		}
-		remainder = os.Args[i:]
+		remainder = h.args[i:]
 		h.debugf("at %d, remainder is %v", i, remainder)
 		if len(remainder) > 0 && h.noPositional {
 			return commonerrors.UsageError(errors.Errorf("flags parsing completed leaving %d unexpected positional arguments: %v",
@@ -266,7 +267,7 @@ func (h *FlagHandler) parseFlags(i int) error {
 	return nil
 }
 
-// Remaining returns the arguments that were not consumed from os.Args. The other way
+// Remaining returns the arguments that were not consumed from arguments (os.Args or WithArgs()). The other way
 // to get the remaining arguments is to add an OnStart callback.
 func (h *FlagHandler) Remaining() []string {
 	return h.remainder
