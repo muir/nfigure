@@ -314,6 +314,23 @@ var cases = []flagTestCase{
 		remaining: []string{"xy"},
 	},
 	{
+		name:    "goFlags subcommand",
+		base:    &flagSet3{},
+		cmd:     "-p 20 foo -i 10 xy",
+		goFlags: true,
+		want: &flagSet3{
+			P: pointer.To(int32(20)),
+		},
+		subcommands: map[string]interface{}{
+			"foo": &flagSet1{},
+		},
+		sub: "foo",
+		wantSub: &flagSet1{
+			I: 10,
+		},
+		remaining: []string{"xy"},
+	},
+	{
 		base:      &flagSet4{},
 		cmd:       "-sa foo bar baz",
 		exportCmd: "-sa foo -sa bar",
@@ -597,7 +614,12 @@ func doFlagTest(t *testing.T, tc flagTestCase, extra []FlaghandlerOptArg) {
 		}
 		args = append(args, ImportFlagSet(fs))
 	}
-	fh := PosixFlagHandler(args...)
+	var fh *FlagHandler
+	if tc.goFlags {
+		fh = GoFlagHandler(args...)
+	} else {
+		fh = PosixFlagHandler(args...)
+	}
 	subcalled := make(map[string]int)
 	subModels := make(map[string]interface{})
 	for sub, model := range tc.subcommands {
@@ -609,9 +631,6 @@ func doFlagTest(t *testing.T, tc flagTestCase, extra []FlaghandlerOptArg) {
 			subcalled[sub]++
 		}))
 		assert.NoError(t, err, "add help subcommand")
-	}
-	if tc.goFlags {
-		fh = GoFlagHandler(args...)
 	}
 	registry := NewRegistry(WithFiller("flag", fh))
 	baseCopy := deepcopy.Copy(tc.base)
