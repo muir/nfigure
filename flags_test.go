@@ -309,7 +309,7 @@ var cases = []flagTestCase{
 		},
 		sub: "foo",
 		wantSub: &flagSet1{
-			I: 11,
+			I: 10,
 		},
 		remaining: []string{"xy"},
 	},
@@ -440,10 +440,7 @@ var cases = []flagTestCase{
 		subcommands: map[string]interface{}{
 			"foo": &flagSet1{},
 		},
-		sub: "foo",
-		wantSub: &flagSet1{
-			I: 11,
-		},
+		sub:       "foo",
 		remaining: []string{"xy"},
 		capture: deindent(`
 			Usage: PROGRAME-NAME [-options args] [parameters]
@@ -557,9 +554,21 @@ func TestFlags(t *testing.T) {
 }
 
 func flagTest(t *testing.T, tc flagTestCase) {
+	t.Run("osArgs", func(t *testing.T) {
+		os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
+		doFlagTest(t, tc, nil)
+	})
+	t.Run("explicitArgs", func(t *testing.T) {
+		os.Args = []string{os.Args[0], "JUNK", "SHOULD", "NOT", "BE", "USED"}
+		doFlagTest(t, tc, []FlaghandlerOptArg{
+			WithArgs(strings.Split(tc.cmd, " ")),
+		})
+	})
+}
+
+func doFlagTest(t *testing.T, tc flagTestCase, extra []FlaghandlerOptArg) {
 	t.Log(tc.cmd)
 	var called int
-	os.Args = append([]string{os.Args[0]}, strings.Split(tc.cmd, " ")...)
 	args := []FlaghandlerOptArg{
 		OnStart(func(args []string) {
 			if tc.sub == "" {
@@ -571,6 +580,7 @@ func flagTest(t *testing.T, tc flagTestCase) {
 		}),
 	}
 	args = append(args, tc.additionalArgs...)
+	args = append(args, extra...)
 	bools := make([]*bool, len(tc.importBools))
 	if tc.importBools != nil {
 		fs := flag.NewFlagSet("importedBools", flag.ContinueOnError)
@@ -589,9 +599,12 @@ func flagTest(t *testing.T, tc flagTestCase) {
 	}
 	fh := PosixFlagHandler(args...)
 	subcalled := make(map[string]int)
+	subModels := make(map[string]interface{})
 	for sub, model := range tc.subcommands {
 		sub, model := sub, model
-		_, err := fh.AddSubcommand(sub, "help for "+sub, model, OnStart(func(args []string) {
+		subCopy := deepcopy.Copy(model)
+		subModels[sub] = subCopy
+		_, err := fh.AddSubcommand(sub, "help for "+sub, subCopy, OnStart(func(args []string) {
 			assert.Equal(t, tc.remaining, args, "remaining args in "+sub)
 			subcalled[sub]++
 		}))
@@ -638,6 +651,9 @@ func flagTest(t *testing.T, tc flagTestCase) {
 			assert.Equal(t, map[string]int{}, subcalled, "sub called")
 		} else {
 			assert.Equal(t, map[string]int{tc.sub: 1}, subcalled, "sub called")
+			if tc.wantSub != nil {
+				assert.Equal(t, tc.wantSub, subModels[tc.sub], "subcommand data")
+			}
 		}
 		for i, spec := range tc.importBools {
 			assert.Equal(t, spec.want, *bools[i], "bool "+spec.name)
